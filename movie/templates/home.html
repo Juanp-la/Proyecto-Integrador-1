@@ -1,2 +1,13 @@
-<h1>Welcome to the home page, {{name}} </h1>
-<h2>this is the full home page </h2>
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Home</title>
+</head>
+<body>
+
+    <h1>Welcome {{ name }}</h1>
+
+    <a href="{% url 'about' %}">About Us</a>
+
+</body>
+</html>
