@@ -12,12 +12,15 @@
     </form>
     <p>Searching for {{ searchTerm }}</p>
     {% for movie in movies %}
+       {% for movie in movies %}
+        <div class="card mb-3" style="max-width: 540px;">
         <h2>{{ movie.title }}</h2>
         <h3>{{ movie.description }}</h3>
-        <img src="{{ movie.image.url }}">
+        <img src="{{ movie.image.url }}" class="img-fluid">
         {% if movie.url %}
             <a href="{{ movie.url }}"> Movie Link </a>
         {% endif %}
+    </div>
     {% endfor %}
     <br/>
 </div>
