@@ -4,4 +4,4 @@ venv/
 .vscode/
 code.md
 news/management/commands/Fake.csv
-movie/management/commands/netflix_titles.csv
+movie/management/commands/movies_initial.csv

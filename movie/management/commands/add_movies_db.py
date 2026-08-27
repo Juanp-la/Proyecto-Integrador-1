@@ -10,7 +10,7 @@ class Command(BaseCommand):
     help = 'Loads movies from netflix_titles.csv into the Movie model'
 
     def handle(self, *args, **options):
-        csv_path = os.path.join(os.path.dirname(__file__), 'netflix_titles.csv')
+        csv_path = os.path.join(os.path.dirname(__file__), 'movies_initial.csv')
         default_image_path = os.path.join('media', 'movies', 'images', 'default.jpg')
 
         count = 0
