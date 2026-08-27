@@ -1,0 +1,126 @@
+{% extends 'base.html' %}
+{% block title %}News — R2 Cinema{% endblock %}
+
+{% block extra_css %}
+  .news-hero{ padding: 3.5rem 0 1.5rem; text-align: center; }
+  .news-eyebrow{
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.8rem;
+    letter-spacing: 0.35em;
+    color: var(--velvet);
+    background: var(--paper);
+    display: inline-block;
+    padding: 0.25rem 0.75rem;
+    border-radius: 2px;
+    margin-bottom: 1.25rem;
+  }
+  .news-title{
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: clamp(2.6rem, 7vw, 4.5rem);
+    letter-spacing: 0.04em;
+    color: var(--marquee);
+    line-height: 0.95;
+    text-shadow: 0 0 26px rgba(231,177,10,0.25);
+  }
+
+  .news-card-link{ display: block; text-decoration: none; color: inherit; }
+  .card{
+    background: var(--ink-2);
+    border: 0;
+    border-left: 4px solid var(--marquee);
+    border-radius: 10px;
+    max-width: 760px;
+    margin-left: auto;
+    margin-right: auto;
+    overflow: hidden;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+  }
+  .card:hover{ transform: translateY(-3px); box-shadow: 0 10px 24px rgba(0,0,0,0.35); }
+  .card-sprocket{
+    height: 10px;
+    background-color: var(--stone);
+    background-image: radial-gradient(circle, var(--ink-2) 2.5px, transparent 2.6px);
+    background-size: 16px 10px;
+    background-position: 12px center;
+  }
+  .card-body{ padding: 1.35rem 1.5rem 1.5rem; }
+  .news-date{
+    width: 100%;
+    height: 100%;
+    min-height: 140px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    border-right: 1px dashed rgba(156,146,132,0.35);
+    padding: 1rem;
+  }
+  .news-date-day{ font-family: 'Bebas Neue', sans-serif; font-size: 2.6rem; line-height: 1; color: var(--marquee); }
+  .news-date-month{
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.72rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--stone);
+    margin-top: 0.4rem;
+  }
+  .card-title{
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 1.6rem;
+    letter-spacing: 0.02em;
+    color: var(--paper);
+  }
+  .card-text{ color: var(--paper); opacity: 0.85; }
+  .read-more{
+    display: inline-block;
+    margin-top: 0.5rem;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.72rem;
+    letter-spacing: 0.05em;
+    color: var(--marquee);
+  }
+
+  @media (prefers-reduced-motion: reduce){
+    .card{ transition: none; }
+    .card:hover{ transform: none; }
+  }
+{% endblock %}
+
+{% block content %}
+<header class="news-hero">
+  <div class="container">
+    <span class="news-eyebrow">PRESS ROOM</span>
+    <h1 class="news-title">Latest News</h1>
+  </div>
+</header>
+
+<div class="container pb-5">
+  {% for news in newss %}
+    <a href="{% url 'news_detail' news.pk %}" class="news-card-link">
+      <div class="card mb-3" style="max-width: 760px;">
+        <div class="card-sprocket"></div>
+        <div class="row g-0">
+          <div class="col-md-4">
+            <div class="news-date">
+              <span class="news-date-day">{{ news.date|date:"d" }}</span>
+              <span class="news-date-month">{{ news.date|date:"M Y" }}</span>
+            </div>
+          </div>
+          <div class="col-md-8">
+            <div class="card-body">
+              <h5 class="card-title">{{ news.headline }}</h5>
+              <p class="card-text">{{ news.body|truncatechars:220 }}</p>
+              <span class="read-more">READ FULL STORY →</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </a>
+  {% empty %}
+    <div class="empty-state">
+      <p>No news have been added yet.</p>
+    </div>
+  {% endfor %}
+</div>
+{% endblock %}

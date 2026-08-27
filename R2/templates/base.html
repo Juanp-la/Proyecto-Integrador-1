@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block title %}R2 Cinema{% endblock %}</title>
+
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Source+Sans+3:wght@400;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+<style>
+  :root{
+    --ink:      #15120F;
+    --ink-2:    #1F1A15;
+    --marquee:  #E7B10A;
+    --velvet:   #7A1F2B;
+    --paper:    #F3ECDC;
+    --stone:    #9C9284;
+  }
+
+  body{
+    background-color: var(--ink);
+    background-image: radial-gradient(circle, rgba(231,177,10,0.06) 1.5px, transparent 1.6px);
+    background-size: 30px 30px;
+    color: var(--paper);
+    font-family: 'Source Sans 3', sans-serif;
+  }
+
+  .cinema-nav{
+    background: var(--ink) !important;
+    border-bottom: 1px solid var(--ink-2);
+    padding: 0.85rem 0;
+  }
+  .cinema-brand{
+    font-family: 'Bebas Neue', sans-serif;
+    letter-spacing: 0.08em;
+    font-size: 1.5rem;
+    color: var(--marquee) !important;
+  }
+  .cinema-nav-link{
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.85rem;
+    letter-spacing: 0.05em;
+    color: var(--stone) !important;
+    border-bottom: 1px solid transparent;
+  }
+  .cinema-nav-link:hover{ color: var(--paper) !important; border-bottom-color: var(--marquee); }
+  .cinema-nav-link.active{ color: var(--marquee) !important; border-bottom-color: var(--marquee); }
+  .navbar-toggler{ border-color: rgba(231,177,10,0.4); }
+  .navbar-toggler-icon{
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 30 30'%3E%3Cpath stroke='rgba(231,177,10,0.9)' stroke-width='2' stroke-linecap='round' stroke-miterlimit='10' d='M4 7h22M4 15h22M4 23h22'/%3E%3C/svg%3E");
+  }
+
+  .sprocket{
+    height: 16px;
+    background-color: var(--marquee);
+    background-image: radial-gradient(circle, var(--ink) 3.5px, transparent 3.6px);
+    background-size: 24px 16px;
+    background-position: 12px center;
+  }
+
+  .btn-marquee{
+    background: var(--marquee);
+    color: var(--ink);
+    border: 0;
+    font-weight: 600;
+    padding: 0.6rem 1.6rem;
+    border-radius: 0;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.8rem;
+    letter-spacing: 0.08em;
+    text-decoration: none;
+    display: inline-block;
+  }
+  .btn-marquee:hover{ background: #cf9c07; color: var(--ink); }
+  .btn-marquee:focus-visible,
+  .cinema-nav-link:focus-visible{
+    outline: 2px solid var(--marquee);
+    outline-offset: 2px;
+  }
+
+  .empty-state{ text-align: center; padding: 3.5rem 1rem; color: var(--stone); }
+  .empty-state h3{
+    font-family: 'Bebas Neue', sans-serif;
+    color: var(--paper);
+    font-size: 2rem;
+    letter-spacing: 0.03em;
+  }
+
+  .back-link{
+    display: inline-block;
+    margin: 2rem 0 0;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.78rem;
+    letter-spacing: 0.06em;
+    color: var(--stone);
+    text-decoration: none;
+  }
+  .back-link:hover{ color: var(--marquee); }
+
+  .site-footer{
+    color: var(--stone);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.75rem;
+    letter-spacing: 0.05em;
+    text-align: center;
+    padding: 1.75rem 0 2.5rem;
+  }
+
+  {% block extra_css %}{% endblock %}
+</style>
+</head>
+<body>
+
+{% load static %}
+<nav class="navbar navbar-expand-lg cinema-nav">
+  <div class="container">
+    <a class="navbar-brand cinema-brand d-flex align-items-center gap-2" href="{% url 'home' %}">
+      <img src="{% static 'images/home.png' %}" alt="" width="28" height="28" class="d-inline-block align-text-top">
+      R2 CINEMA
+    </a>
+    <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav"
+        aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
+      <span class="navbar-toggler-icon"></span>
+    </button>
+    <div class="collapse navbar-collapse" id="navbarNav">
+      <ul class="navbar-nav ms-auto align-items-lg-center gap-lg-3">
+        <li class="nav-item"><a class="nav-link cinema-nav-link" href="/admin/">ADMIN</a></li>
+        <li class="nav-item"><a class="nav-link cinema-nav-link {% if active_page == 'news' %}active{% endif %}" href="{% url 'news' %}">NEWS</a></li>
+        <li class="nav-item"><a class="nav-link cinema-nav-link {% if active_page == 'statistics' %}active{% endif %}" href="{% url 'statistics' %}">STATISTICS</a></li>
+        <li class="nav-item"><a class="nav-link cinema-nav-link {% if active_page == 'about' %}active{% endif %}" href="{% url 'about' %}">ABOUT US</a></li>
+        <li class="nav-item"><span class="nav-link cinema-nav-link">BY JUAN PABLO LOPERA ARRAZOLA</span></li>
+      </ul>
+    </div>
+  </div>
+</nav>
+<div class="sprocket"></div>
+
+{% block content %}{% endblock %}
+
+<div class="sprocket"></div>
+<footer class="site-footer">R2 CINEMA · BUILT WITH DJANGO + BOOTSTRAP</footer>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

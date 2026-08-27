@@ -1,72 +1,8 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>About — R2 Cinema</title>
+{% extends 'base.html' %}
+{% block title %}About — R2 Cinema{% endblock %}
 
-<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Source+Sans+3:wght@400;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-
-<style>
-  :root{
-    --ink:      #15120F;
-    --ink-2:    #1F1A15;
-    --marquee:  #E7B10A;
-    --velvet:   #7A1F2B;
-    --paper:    #F3ECDC;
-    --stone:    #9C9284;
-  }
-
-  body{
-    background: var(--ink);
-    color: var(--paper);
-    font-family: 'Source Sans 3', sans-serif;
-    min-height: 100vh;
-  }
-
-  .cinema-nav{
-    background: var(--ink);
-    border-bottom: 1px solid var(--ink-2);
-    padding: 1.1rem 0;
-  }
-  .cinema-brand{
-    font-family: 'Bebas Neue', sans-serif;
-    letter-spacing: 0.08em;
-    font-size: 1.6rem;
-    color: var(--marquee);
-    text-decoration: none;
-  }
-  .cinema-nav-link{
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 0.85rem;
-    letter-spacing: 0.05em;
-    color: var(--stone);
-    text-decoration: none;
-    border-bottom: 1px solid transparent;
-  }
-  .cinema-nav-link:hover{
-    color: var(--paper);
-    border-bottom-color: var(--marquee);
-  }
-  .cinema-nav-link.active{
-    color: var(--marquee);
-    border-bottom-color: var(--marquee);
-  }
-
-  .sprocket{
-    height: 16px;
-    background-color: var(--marquee);
-    background-image: radial-gradient(circle, var(--ink) 3.5px, transparent 3.6px);
-    background-size: 24px 16px;
-    background-position: 12px center;
-  }
-
-  .about-hero{
-    padding: 4rem 0 1.5rem;
-    text-align: center;
-  }
+{% block extra_css %}
+  .about-hero{ padding: 3.5rem 0 1.5rem; text-align: center; }
   .about-eyebrow{
     font-family: 'JetBrains Mono', monospace;
     font-size: 0.8rem;
@@ -87,7 +23,6 @@
     text-shadow: 0 0 26px rgba(231,177,10,0.25);
   }
 
-  /* Program note card, styled like a playbill insert */
   .program{
     max-width: 40rem;
     margin: 2.5rem auto 3rem;
@@ -101,11 +36,7 @@
     position: absolute;
     top: 0; left: 0; right: 0;
     height: 6px;
-    background: repeating-linear-gradient(
-      90deg,
-      var(--marquee) 0 10px,
-      var(--ink-2) 10px 20px
-    );
+    background: repeating-linear-gradient(90deg, var(--marquee) 0 10px, var(--ink-2) 10px 20px);
     border-radius: 10px 10px 0 0;
   }
   .program-label{
@@ -115,12 +46,7 @@
     color: var(--stone);
     margin-bottom: 1.25rem;
   }
-  .program p{
-    font-size: 1.02rem;
-    line-height: 1.7;
-    color: var(--paper);
-    opacity: 0.9;
-  }
+  .program p{ font-size: 1.02rem; line-height: 1.7; color: var(--paper); opacity: 0.9; }
   .program-credit{
     font-family: 'JetBrains Mono', monospace;
     font-size: 0.85rem;
@@ -131,65 +57,36 @@
     margin-top: 1.4rem;
   }
 
-  .btn-marquee{
-    background: var(--marquee);
-    color: var(--ink);
-    border: 0;
-    font-weight: 600;
-    padding: 0.6rem 1.6rem;
-    border-radius: 0;
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 0.8rem;
-    letter-spacing: 0.08em;
-    text-decoration: none;
-    display: inline-block;
-  }
-  .btn-marquee:hover{
-    background: #cf9c07;
-    color: var(--ink);
-  }
-  .btn-marquee:focus-visible,
-  .cinema-nav-link:focus-visible{
-    outline: 2px solid var(--marquee);
-    outline-offset: 2px;
-  }
-
   .back-wrap{ text-align: center; margin-bottom: 3.5rem; }
 
-  .site-footer{
-    color: var(--stone);
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 0.75rem;
-    letter-spacing: 0.05em;
-    text-align: center;
-    padding: 1.75rem 0 2.5rem;
+  .logo-showcase{
+    display: flex;
+    justify-content: center;
+    margin: 0.5rem 0 2rem;
+  }
+  .logo-showcase-img{
+    width: 110px;
+    height: 110px;
+    filter: drop-shadow(0 0 26px rgba(231,177,10,0.45));
   }
 
   @media (max-width: 576px){
     .program{ padding: 1.75rem 1.4rem 1.4rem; margin: 2rem 1rem 2.5rem; }
   }
-</style>
-</head>
-<body>
+{% endblock %}
 
-<nav class="cinema-nav">
-  <div class="container d-flex justify-content-between align-items-center">
-    <a href="/" class="cinema-brand">R2 CINEMA</a>
-    <div class="d-flex gap-3 align-items-center">
-      <a href="/admin/" class="cinema-nav-link">ADMIN</a>
-      <a href="{% url 'about' %}" class="cinema-nav-link active">ABOUT US</a>
-      <span class="cinema-nav-link ms-4">BY JUAN PABLO LOPERA ARRAZOLA</span>
-    </div>
-  </div>
-</nav>
-<div class="sprocket"></div>
-
+{% block content %}
 <header class="about-hero">
   <div class="container">
     <span class="about-eyebrow">PROGRAM NOTES</span>
     <h1 class="about-title">About This Project</h1>
   </div>
 </header>
+
+{% load static %}
+<div class="logo-showcase">
+  <img src="{% static 'images/home.png' %}" alt="R2 Cinema logo" class="logo-showcase-img">
+</div>
 
 <div class="program">
   <p class="program-label">SCREENING INFO</p>
@@ -199,11 +96,6 @@
 </div>
 
 <div class="back-wrap">
-  <a href="/" class="btn-marquee">← BACK TO HOME</a>
+  <a href="{% url 'home' %}" class="btn-marquee">← BACK TO HOME</a>
 </div>
-
-<div class="sprocket"></div>
-<footer class="site-footer">R2 CINEMA · BUILT WITH DJANGO + BOOTSTRAP</footer>
-
-</body>
-</html>
+{% endblock %}
