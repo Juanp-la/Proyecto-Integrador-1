@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+
+{% block title %}Movie Reviews — Sign Up{% endblock %}
+
+{% block content %}
+<div class="signup-wrap">
+  <h2>Added {{ email }} to mailing list</h2>
+  <a class="back-home" href="{% url 'home' %}">&larr; Home</a>
+</div>
+{% endblock %}

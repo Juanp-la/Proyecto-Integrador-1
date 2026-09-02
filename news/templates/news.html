@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+
+{% block title %}Movie Reviews — News{% endblock %}
+
+{% block content %}
+<div class="news-wrap">
+  <h1 class="display">Latest News</h1>
+
+  {% for news in newss %}
+    <div class="card mb-3" style="max-width: 540px;">
+      <div class="row g-0">
+        <div class="col-md-8">
+          <div class="card-body">
+            <h5 class="card-title">{{ news.headline }}</h5>
+            <p class="card-text">{{ news.body }}</p>
+            <p class="card-text"><small class="text-muted">{{ news.date }}</small></p>
+          </div>
+        </div>
+      </div>
+    </div>
+  {% empty %}
+    <p class="empty-state">Aún no hay noticias cargadas.</p>
+  {% endfor %}
+</div>
+{% endblock %}

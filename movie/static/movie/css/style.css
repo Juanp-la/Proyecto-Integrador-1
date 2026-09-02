@@ -268,3 +268,120 @@ main {
     margin-top: 0.5rem;
   }
 }
+
+/* ---------------------------------------------------------
+   Taller 2 — Navbar, Cards de Bootstrap, Footer, News, Signup
+--------------------------------------------------------- */
+
+.navbar {
+  background: var(--bg-alt);
+  border-bottom: 1px solid var(--gold-soft);
+  padding: 0.6rem 0;
+}
+.navbar .brand {
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 1.7rem;
+  letter-spacing: 0.06em;
+  color: var(--text) !important;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.navbar .brand span { color: var(--gold); }
+.navbar-nav .nav-link {
+  color: var(--text-muted) !important;
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-weight: 600;
+  margin-left: 0.5rem;
+}
+.navbar-nav .nav-link:hover,
+.navbar-nav .nav-link.active { color: var(--gold) !important; }
+.navbar-toggler { border-color: var(--gold-soft); }
+
+/* --- Bootstrap Cards (películas) con el tema de cine --- */
+.card {
+  background: var(--bg-card) !important;
+  border: none !important;
+  border-top: 3px solid var(--gold) !important;
+  border-radius: var(--radius) !important;
+  color: var(--text);
+  transition: transform 0.18s ease, box-shadow 0.18s ease;
+  overflow: hidden;
+}
+.card:hover {
+  transform: translateY(-6px);
+  box-shadow: 0 14px 28px rgba(0, 0, 0, 0.45), 0 0 0 1px var(--gold-soft);
+}
+.card-img-top {
+  aspect-ratio: 2 / 3;
+  object-fit: cover;
+  background: #100e15;
+}
+.card-title {
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 1.4rem;
+  letter-spacing: 0.03em;
+  color: var(--text);
+}
+.card-text { color: var(--text-muted); font-size: 0.9rem; }
+.card-text small.text-muted { color: var(--text-muted) !important; }
+.card .btn-primary {
+  background: var(--gold);
+  border: none;
+  color: var(--bg);
+  font-weight: 600;
+  text-transform: uppercase;
+  font-size: 0.78rem;
+  letter-spacing: 0.06em;
+}
+.card .btn-primary:hover { background: #f0bc63; color: var(--bg); }
+
+/* --- News: horizontal cards --- */
+.news-wrap { padding-top: 2rem; }
+.news-wrap .card { border-top: none !important; border-left: 3px solid var(--gold) !important; }
+.news-wrap h1 { margin-bottom: 1.5rem; }
+
+/* --- Footer --- */
+.site-footer {
+  background: var(--bg-alt);
+  border-top: 1px solid var(--gold-soft);
+  color: var(--text-muted);
+}
+.site-footer h4 {
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 1rem;
+  letter-spacing: 0.05em;
+  margin: 0;
+  color: var(--text-muted);
+}
+
+/* --- Statistics --- */
+.stats-wrap { padding: 2rem 0; text-align: center; }
+.stats-wrap h1 { margin-bottom: 0.5rem; }
+.stats-wrap img {
+  max-width: 100%;
+  background: #fff;
+  border-radius: var(--radius);
+  padding: 1rem;
+  margin: 1.5rem 0;
+}
+
+/* --- Signup --- */
+.signup-wrap {
+  max-width: 480px;
+  margin: 3rem auto;
+  text-align: center;
+  background: var(--bg-alt);
+  border: 1px solid var(--gold-soft);
+  border-radius: var(--radius);
+  padding: 2.5rem;
+}
+.signup-wrap a.back-home {
+  display: inline-block;
+  margin-top: 1.2rem;
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
