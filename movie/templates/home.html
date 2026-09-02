@@ -12,21 +12,22 @@
     </form>
     <p>Searching for {{ searchTerm }}</p>
 
-    <div class="row row-cols-1 row-cols-md-3 g-4">
-        {% for movie in movies %}
-        <div class="col">
-            <div class="card">
-                <img src="{{ movie.image.url }}" class="card-img-top" alt="...">
-                <div class="card-body">
-                    <h5 class="card-title">{{ movie.title }}</h5>
-                    <p class="card-text">{{ movie.description }}</p>
-                    {% if movie.url %}
-                        <a href="{{ movie.url }}" class="btn btn-primary">Movie Link</a>
-                    {% endif %}
-                </div>
+<div class="row row-cols-1 row-cols-md-3 g-4">
+    {% for movie in movies %}
+    <div class="col">
+        <div class="card">
+            <img src="{{ movie.image.url }}" class="card-img-top" alt="...">
+            <div class="card-body">
+                <h5 class="card-title">{{ movie.title }}</h5>
+                <p class="card-text">{{ movie.description }}</p>
+                <p class="card-text"><small class="text-muted">{{ movie.genre }} | {{ movie.year }}</small></p>
+                {% if movie.url %}
+                    <a href="{{ movie.url }}" class="btn btn-primary">Movie Link</a>
+                {% endif %}
             </div>
         </div>
-        {% endfor %}
     </div>
+    {% endfor %}
+</div>
     <br/>
 </div>
