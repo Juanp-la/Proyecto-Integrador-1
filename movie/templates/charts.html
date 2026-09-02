@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+
+{% block title %}Movie Reviews — Charts{% endblock %}
+
+{% block content %}
+<h1 class="mb-4 text-center">Estadísticas del catálogo</h1>
+
+<div class="row g-4">
+  <div class="col-12 col-lg-6">
+    <div class="card shadow-sm">
+      <div class="card-header">Películas por año</div>
+      <div class="card-body text-center">
+        <img src="{% url 'chart_by_year' %}" alt="Gráfica de películas por año" class="img-fluid">
+      </div>
+    </div>
+  </div>
+  <div class="col-12 col-lg-6">
+    <div class="card shadow-sm">
+      <div class="card-header">Películas por género</div>
+      <div class="card-body text-center">
+        <img src="{% url 'chart_by_genre' %}" alt="Gráfica de películas por género" class="img-fluid">
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

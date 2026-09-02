@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+
+{% block title %}Movie Reviews — News{% endblock %}
+
+{% block content %}
+<h1 class="mb-4 text-center">Últimas noticias</h1>
+
+{% if news %}
+  <div class="d-flex flex-column gap-3">
+    {% for item in news %}
+      <div class="card mb-2" style="max-width: 900px; margin: 0 auto; width: 100%;">
+        <div class="row g-0">
+          <div class="col-md-4">
+            <img src="{{ item.image.url }}" class="img-fluid rounded-start h-100" style="object-fit: cover;" alt="{{ item.title }}">
+          </div>
+          <div class="col-md-8">
+            <div class="card-body">
+              <h5 class="card-title">{{ item.title }}</h5>
+              <p class="card-text">{{ item.summary }}</p>
+              <p class="card-text"><small class="text-muted">{{ item.published_at }}</small></p>
+            </div>
+          </div>
+        </div>
+      </div>
+    {% endfor %}
+  </div>
+{% else %}
+  <p class="text-center">Todavía no hay noticias cargadas.</p>
+{% endif %}
+{% endblock %}

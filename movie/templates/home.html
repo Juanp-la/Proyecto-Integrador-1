@@ -4,13 +4,13 @@
 {% block title %}Movie Reviews — Home{% endblock %}
 
 {% block content %}
-<section class="hero">
-  <h1>Welcome, <span class="accent">{{ name }}</span></h1>
+<section class="hero mb-4 text-center">
+  <h1>Welcome, <span class="accent text-danger">{{ name }}</span></h1>
   <p class="subtitle">Descubre películas, búscalas por nombre y comparte lo que piensas.</p>
 
-  <form action="" class="search-form" role="search">
-    <input type="text" name="searchMovie" placeholder="Buscar película..." aria-label="Buscar película">
-    <button type="submit">Buscar</button>
+  <form action="" class="d-flex justify-content-center gap-2 mb-3" role="search">
+    <input type="text" name="searchMovie" class="form-control w-auto" placeholder="Buscar película..." aria-label="Buscar película">
+    <button type="submit" class="btn btn-danger">Buscar</button>
   </form>
 
   {% if searchTerm %}
@@ -19,24 +19,30 @@
 </section>
 
 {% if movies %}
-  <div class="movie-grid">
+  <div class="row row-cols-1 row-cols-sm-2 row-cols-md-3 row-cols-lg-4 g-4">
     {% for movie in movies %}
-      <article class="movie-card">
-        <div class="poster-wrap">
+      <div class="col">
+        <div class="card h-100 shadow-sm">
           {% if movie.image %}
-            <img src="{{ movie.image.url }}" alt="Póster de {{ movie.title }}">
+            <img src="{{ movie.image.url }}" class="card-img-top" alt="Póster de {{ movie.title }}" style="height: 340px; object-fit: cover;">
           {% else %}
-            <div class="poster-placeholder">Sin imagen disponible</div>
+            <div class="card-img-top bg-secondary text-white d-flex align-items-center justify-content-center" style="height: 340px;">
+              Sin imagen disponible
+            </div>
           {% endif %}
+          <div class="card-body d-flex flex-column">
+            <h5 class="card-title">{{ movie.title }}</h5>
+            <h6 class="card-subtitle mb-2 text-muted">
+              {{ movie.year|default:"—" }}
+              {% if movie.genre %} · {{ movie.genre }}{% endif %}
+            </h6>
+            <p class="card-text flex-grow-1">{{ movie.description }}</p>
+            {% if movie.url %}
+              <a class="btn btn-outline-danger mt-auto" href="{{ movie.url }}" target="_blank" rel="noopener">Ver más &rarr;</a>
+            {% endif %}
+          </div>
         </div>
-        <div class="movie-body">
-          <h2>{{ movie.title }}</h2>
-          <p>{{ movie.description }}</p>
-          {% if movie.url %}
-            <a class="movie-link" href="{{ movie.url }}" target="_blank" rel="noopener">Ver más &rarr;</a>
-          {% endif %}
-        </div>
-      </article>
+      </div>
     {% endfor %}
   </div>
 {% else %}
