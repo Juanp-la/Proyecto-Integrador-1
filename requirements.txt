@@ -1,0 +1,25 @@
+# Backend framework
+Django==5.0.6
+djangorestframework==3.15.1
+
+# Authentication (JWT)
+djangorestframework-simplejwt==5.3.1
+
+# Database driver (PostgreSQL)
+psycopg2-binary==2.9.9
+
+# CORS (allows the React frontend, on a different origin, to call this API)
+django-cors-headers==4.3.1
+
+# Asynchronous / scheduled tasks (waiting list expiration, notifications)
+celery==5.4.0
+redis==5.0.4
+
+# Environment variables management
+python-dotenv==1.0.1
+
+# Production WSGI server
+gunicorn==22.0.0
+
+# Static files serving in production
+whitenoise==6.6.0
