@@ -1,0 +1,19 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="container mt-5">
+    <h2>Recomendador de Películas con IA</h2>
+    <form method="GET" action="">
+        <input type="text" name="search_movie" class="form-control mb-3" placeholder="Ej: Película de superhéroes..." value="{{ search_term|default_if_none:'' }}">
+        <button type="submit" class="btn btn-primary">Recomendar</button>
+    </form>
+    
+    {% if best_movie %}
+    <div class="mt-4 p-4 border rounded">
+        <h4>Te recomendamos: {{ best_movie.title }}</h4>
+        <p class="text-muted">Nivel de coincidencia: {{ max_similarity|floatformat:4 }}</p>
+        <img src="{{ best_movie.image.url }}" width="250" class="img-fluid rounded mb-3">
+        <p>{{ best_movie.description }}</p>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

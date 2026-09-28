@@ -1,0 +1,5 @@
+openAI.env
+*.env
+.env
+
+openAI.env
