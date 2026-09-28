@@ -1,11 +1,12 @@
 import os
+import time
 from huggingface_hub import InferenceClient
 from dotenv import load_dotenv
 from django.core.management.base import BaseCommand
 from movie.models import Movie
 
 class Command(BaseCommand):
-    help = "Genera una imagen con IA (Hugging Face) para la primera película y actualiza la base de datos"
+    help = "Genera una imagen con IA (Hugging Face) para cada película y actualiza la base de datos"
 
     def generate_and_download_image(self, client, movie_title, save_folder):
         prompt = f"Movie poster of {movie_title}"
@@ -34,8 +35,19 @@ class Command(BaseCommand):
         self.stdout.write(f"Found {movies.count()} movies")
 
         for movie in movies:
-            image_relative_path = self.generate_and_download_image(client, movie.title, images_folder)
-            movie.image = image_relative_path
-            movie.save()
-            self.stdout.write(self.style.SUCCESS(f"Saved and updated image for: {movie.title}"))
-            break
+            # Salta películas que ya tienen una imagen generada (m_...)
+            if movie.image and 'm_' in str(movie.image):
+                self.stdout.write(f"Skipping (already has image): {movie.title}")
+                continue
+
+            try:
+                image_relative_path = self.generate_and_download_image(client, movie.title, images_folder)
+                movie.image = image_relative_path
+                movie.save()
+                self.stdout.write(self.style.SUCCESS(f"Saved and updated image for: {movie.title}"))
+                time.sleep(1)  # pequeña pausa para evitar rate limiting
+            except Exception as e:
+                self.stderr.write(f"Failed for {movie.title}: {str(e)}")
+                time.sleep(2)
+
+        self.stdout.write(self.style.SUCCESS("Finished processing all movies."))
