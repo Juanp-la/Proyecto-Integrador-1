@@ -1,3 +1,4 @@
+import os
 from django.shortcuts import render
 from django.http import HttpResponse
 from .models import Movie
@@ -5,6 +6,9 @@ import matplotlib.pyplot as plt
 import matplotlib
 import io
 import urllib, base64
+import numpy as np
+from huggingface_hub import InferenceClient
+from dotenv import load_dotenv
 
 # Create your views here.
 
@@ -19,6 +23,10 @@ def home(request):
 
 def about(request):
     return render(request, 'about.html')
+
+def signup(request):
+    email = request.GET.get('email')
+    return render(request, 'signup.html', {'email': email})
 
 def statistics_view(request):
     matplotlib.use('Agg')
@@ -83,3 +91,35 @@ def statistics_view(request):
     graphic_genre = graphic_genre.decode('utf-8')
 
     return render(request, 'statistics.html', {'graphic_year': graphic_year, 'graphic_genre': graphic_genre})
+
+def recommend(request):
+    prompt = request.GET.get('prompt')
+    best_movie = None
+    max_similarity = None
+
+    if prompt:
+        load_dotenv('huggingface.env')
+        client = InferenceClient(
+            provider="hf-inference",
+            api_key=os.environ.get('hf_token'),
+        )
+
+        result = client.feature_extraction(
+            prompt,
+            model="sentence-transformers/all-MiniLM-L6-v2",
+        )
+        prompt_emb = np.array(result, dtype=np.float32).flatten()
+
+        max_similarity = -1
+        for movie in Movie.objects.all():
+            movie_emb = np.frombuffer(movie.emb, dtype=np.float32)
+            similarity = np.dot(prompt_emb, movie_emb) / (np.linalg.norm(prompt_emb) * np.linalg.norm(movie_emb))
+            if similarity > max_similarity:
+                max_similarity = similarity
+                best_movie = movie
+
+    return render(request, 'recommend.html', {
+        'prompt': prompt,
+        'best_movie': best_movie,
+        'max_similarity': max_similarity,
+    })

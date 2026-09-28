@@ -1,0 +1,28 @@
+{% extends 'base.html' %}
+{% block content %}
+
+<h2>Movie Recommendation System</h2>
+<p>Describe the kind of movie you're looking for, and we'll find the closest match.</p>
+
+<form action="{% url 'recommend' %}">
+    <div class="mb-3">
+        <label for="prompt" class="form-label">Describe a movie:</label>
+        <input type="text" class="form-control" name="prompt" value="{{ prompt|default:'' }}" />
+    </div>
+    <button type="submit" class="btn btn-primary">Recommend</button>
+</form>
+
+{% if best_movie %}
+<div class="card mt-4" style="max-width: 400px;">
+    <img src="{{ best_movie.image.url }}" class="card-img-top" alt="...">
+    <div class="card-body">
+        <h5 class="card-title">{{ best_movie.title }}</h5>
+        <p class="card-text">{{ best_movie.description }}</p>
+        <p class="card-text"><small class="text-muted">Similarity: {{ max_similarity|floatformat:4 }}</small></p>
+    </div>
+</div>
+{% elif prompt %}
+<p>No recommendation found.</p>
+{% endif %}
+
+{% endblock content %}
