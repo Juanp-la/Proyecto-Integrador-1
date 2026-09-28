@@ -13,7 +13,10 @@ class Command(BaseCommand):
             text,
             model="sentence-transformers/all-MiniLM-L6-v2",
         )
-        return np.array(result, dtype=np.float32).flatten()
+        result_arr = np.array(result, dtype=np.float32)
+        if result_arr.ndim == 2:
+            result_arr = result_arr.mean(axis=0)
+        return result_arr.flatten()
 
     def cosine_similarity(self, a, b):
         return np.dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b))

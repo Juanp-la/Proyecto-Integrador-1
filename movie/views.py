@@ -108,7 +108,10 @@ def recommend(request):
             prompt,
             model="sentence-transformers/all-MiniLM-L6-v2",
         )
-        prompt_emb = np.array(result, dtype=np.float32).flatten()
+        result_arr = np.array(result, dtype=np.float32)
+        if result_arr.ndim == 2:
+            result_arr = result_arr.mean(axis=0)
+        prompt_emb = result_arr.flatten()
 
         max_similarity = -1
         for movie in Movie.objects.all():

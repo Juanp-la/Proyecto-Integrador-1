@@ -25,7 +25,10 @@ class Command(BaseCommand):
                     movie.description,
                     model="sentence-transformers/all-MiniLM-L6-v2",
                 )
-                embedding = np.array(result, dtype=np.float32).flatten()
+                result_arr = np.array(result, dtype=np.float32)
+                if result_arr.ndim == 2:
+                    result_arr = result_arr.mean(axis=0)
+                embedding = result_arr.flatten()
                 movie.emb = embedding.tobytes()
                 movie.save()
                 self.stdout.write(self.style.SUCCESS(f"👌 Embedding stored for: {movie.title}"))
