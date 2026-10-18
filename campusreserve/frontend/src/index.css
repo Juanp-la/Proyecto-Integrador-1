@@ -1,0 +1,25 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+@import 'tailwindcss';
+
+@theme inline {
+  --color-navy: #1B2A4A;
+  --color-navy-dark: #111B30;
+  --color-navy-light: #2a3f6b;
+  --color-gold: #C9932F;
+  --color-gold-light: #e0a83a;
+  --color-bg: #F4F6FA;
+  --color-card: #ffffff;
+  --color-green: #1A8A4A;
+  --color-green-bg: #E8F6EE;
+  --color-orange: #D4720A;
+  --color-orange-bg: #FEF0DC;
+  --color-red: #C0392B;
+  --color-red-bg: #FDEDEC;
+  --font-sans: 'Inter', sans-serif;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
