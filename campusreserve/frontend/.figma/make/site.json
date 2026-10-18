@@ -1,0 +1,10 @@
+{
+  "description": "University students can easily reserve, manage, and cancel sports court bookings while joining waiting lists and receiving timely availability notifications.",
+  "robots": {
+    "index": false
+  },
+  "accessibility": {
+    "addBypassLinks": false,
+    "ignoreReducedMotion": false
+  }
+}
