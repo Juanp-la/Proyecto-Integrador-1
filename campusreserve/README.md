@@ -115,7 +115,20 @@ celery -A campusreserve worker --loglevel=info
 
 ---
 
-## Frontend setup
+## Deploy (one server, e.g. AWS EC2)
+
+The compiled frontend lives in `backend/frontend_build/` and Django serves it at `/`, so a single server shows the whole app:
+
+```bash
+cd backend
+sudo python3.11 manage.py migrate
+sudo python3.11 manage.py seed_courts
+sudo python3.11 manage.py runserver 0.0.0.0:80   # http://<public-ip>/  (app)  ·  /api/  ·  /admin/
+```
+
+Add the server's public IP to `ALLOWED_HOSTS` in `campusreserve/settings.py`. After changing the frontend, rebuild it with `cd frontend && npm run build` and commit `backend/frontend_build/`.
+
+## Frontend setup (development)
 
 ```bash
 cd frontend

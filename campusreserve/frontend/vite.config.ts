@@ -15,6 +15,10 @@ export default defineConfig(({ mode }) => {
     build: {
       sourcemap: emitSourcemaps ? 'inline' : false,
       minify: !emitSourcemaps,
+      // The compiled app goes inside the Django project, which serves it at "/"
+      // (so http://<server-ip>/ shows the full app, see campusreserve/spa.py).
+      outDir: path.resolve(__dirname, '../backend/frontend_build'),
+      emptyOutDir: true,
     },
     plugins: [
       react(),
@@ -34,6 +38,8 @@ export default defineConfig(({ mode }) => {
       port: parseInt(process.env.PORT || '5173'),
       strictPort: true,
       watch: { ignored: ['**/.figma/**'] },
+      // In development, /api calls go to the local Django server.
+      proxy: { '/api': 'http://localhost:8000' },
     },
     preview: {
       host: process.env.FIGMA_DEV_SERVER_HOST || '0.0.0.0',

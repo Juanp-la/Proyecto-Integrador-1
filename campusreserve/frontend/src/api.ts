@@ -1,7 +1,12 @@
 // ─── API client for the CampusReserve Django backend ──────────────────────
 // Implements HU1–HU8 against the real REST API instead of local mock data.
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000/api";
+// - Development (npm run dev): VITE_API_BASE_URL, or the local Django server.
+// - Production build (served by Django at "/"): same server, so just "/api".
+//   This works on any IP/domain (e.g. the AWS EC2 public IP) without changes.
+const API_BASE = import.meta.env.DEV
+  ? import.meta.env.VITE_API_BASE_URL || "http://localhost:8000/api"
+  : "/api";
 
 const TOKEN_KEY = "campusreserve_token";
 
