@@ -21,6 +21,7 @@ interface Reservation {
   date: string;
   time: string;
   status: "Confirmed";
+  isActive: boolean;
 }
 
 // ─── Sport display metadata (backend stores machine-readable sport codes) ────
@@ -57,17 +58,6 @@ function todayLabel() {
   const weekdays = ["Domingo", "Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado"];
   const semester = d.getMonth() < 6 ? "1" : "2";
   return `${weekdays[d.getDay()]}, ${d.getDate()} de ${MONTH_LABELS[d.getMonth()]} de ${d.getFullYear()} · Semestre ${d.getFullYear()}-${semester}`;
-}
-
-// A reservation is "active" until its end time has passed (one active reservation at a time).
-function isActiveReservation(r: { date: string; time: string }) {
-  const today = localIsoDate(new Date());
-  if (r.date > today) return true;
-  if (r.date < today) return false;
-  const end = r.time.split(" – ")[1] || "00:00";
-  const now = new Date();
-  const nowHHMM = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
-  return end > nowHHMM;
 }
 
 function buildDays() {
@@ -143,6 +133,7 @@ function toUiReservation(r: ApiReservation): Reservation {
     date: r.reservation_date,
     time: `${r.start_time.slice(0, 5)} – ${r.end_time.slice(0, 5)}`,
     status: "Confirmed",
+    isActive: r.is_active,
   };
 }
 
@@ -410,26 +401,38 @@ function WidgetMessage({ text }: { text: string }) {
 }
 
 function WeatherCard({ report, loading }: { report: api.WeatherReport | null; loading: boolean }) {
-  if (loading) return <WidgetMessage text="Consultando el clima de hoy…" />;
+  if (loading) return <WidgetMessage text="Consultando el clima de Medellín…" />;
   if (!report || !report.available) return <WidgetMessage text="No se pudo consultar el clima en este momento." />;
+
+  const cur = report.current;
+  const dayLabel = report.day_label || "hoy";
 
   return (
     <div className="bg-white rounded-2xl border border-[#E8ECF4] shadow-sm p-5">
       <div className="flex items-start gap-4">
-        <div className="text-5xl leading-none">{report.icon}</div>
+        <div className="flex flex-col items-center flex-shrink-0 w-20">
+          <div className="text-5xl leading-none">{report.icon}</div>
+          {cur && <p className="text-2xl font-bold text-[#111B30] mt-1">{cur.temperature}°</p>}
+        </div>
         <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 flex-wrap">
+          <p className="text-[11px] font-semibold uppercase tracking-wider text-[#6B7A99]">
+            {cur ? `Ahora en ${report.location || "Medellín"}` : `${report.location || "Medellín"} · ${dayLabel}`}
+          </p>
+          <div className="flex items-center gap-2 flex-wrap mt-0.5">
             <p className="text-base font-bold text-[#111B30]">{report.condition}</p>
             <AiBadge source={report.source} />
           </div>
           <p className="text-xs text-[#6B7A99] mt-0.5">
-            {report.temp_min}°C – {report.temp_max}°C · Lluvia hasta {report.precipitation_probability_max}%
+            {cur && `Sensación ${cur.apparent_temperature}° · Humedad ${cur.humidity}% · `}
+            {dayLabel === "hoy" ? "Hoy" : "Mañana"} {report.temp_min}° – {report.temp_max}°
+            {report.hourly && report.hourly.length > 0 &&
+              ` · Lluvia ${dayLabel === "hoy" ? "en lo que queda del día" : "mañana"} hasta ${report.precipitation_probability_max}%`}
           </p>
           <p className="text-sm text-[#111B30] mt-3 leading-relaxed">{report.summary}</p>
           {report.advice && <p className="text-xs text-[#6B7A99] mt-2">💡 {report.advice}</p>}
           {report.best_hours && report.best_hours.length > 0 && (
             <p className="text-xs mt-2" style={{ color: ATXT }}>
-              Mejores horas para jugar afuera: <strong>{report.best_hours.join(", ")}</strong>
+              Mejores horas para jugar afuera {dayLabel}: <strong>{report.best_hours.join(", ")}</strong>
             </p>
           )}
         </div>
@@ -439,6 +442,7 @@ function WeatherCard({ report, loading }: { report: api.WeatherReport | null; lo
           {report.hourly.map(h => (
             <div
               key={h.hour}
+              title={`${h.hour} · ${h.condition ?? ""}`}
               className="flex-shrink-0 w-14 rounded-xl py-2 flex flex-col items-center"
               style={{ background: h.bad ? "#FDEDEC" : "#F4F6FA" }}
             >
@@ -685,7 +689,7 @@ function HomeScreen({ onNavigate, reservations, userName, onPickSlot }: {
 
         {/* Weather (AI) */}
         <div className="mb-8">
-          <h2 className="text-lg font-bold text-[#111B30] mb-4">🌦️ Clima de hoy en el campus</h2>
+          <h2 className="text-lg font-bold text-[#111B30] mb-4">🌦️ Clima en Medellín</h2>
           <WeatherCard report={weather.data} loading={weather.loading} />
         </div>
 
@@ -1483,7 +1487,7 @@ function NotificationsScreen({ offer, alerts, onNavigate, onConfirmed, onDecline
           </div>
         )}
 
-        <h2 className="text-lg font-bold text-[#111B30] mb-4">🌦️ Reporte del clima de hoy</h2>
+        <h2 className="text-lg font-bold text-[#111B30] mb-4">🌦️ Clima en Medellín</h2>
         <WeatherCard report={weather.data} loading={weather.loading} />
       </main>
     </div>
@@ -1508,8 +1512,16 @@ export default function App() {
   const [bookPreset, setBookPreset] = useState<{ day: string; slot: string } | null>(null);
 
   const waitlistOffer = waitlist.find(w => w.status === "notified") || null;
-  const activeReservations = reservations.filter(isActiveReservation);
+  // "Active" comes from the server (Bogotá time), not from this computer's clock.
+  const activeReservations = reservations.filter(r => r.isActive);
   const activeReservation = activeReservations[0] || null;
+
+  // The server is the source of truth: reload instead of trusting local state.
+  const refreshReservations = () =>
+    api
+      .myReservations()
+      .then(list => setReservations(list.filter(r => r.status === "confirmed").map(toUiReservation)))
+      .catch(() => undefined);
 
   const refreshWaitlist = () =>
     api.myWaitlist().then(setWaitlist).catch(() => undefined);
@@ -1554,13 +1566,15 @@ export default function App() {
   // While logged in, check waiting lists and weather alerts every 2 minutes.
   useEffect(() => {
     if (screen === "login") return;
-    const id = setInterval(() => { refreshWaitlist(); refreshAlerts(); }, 2 * 60 * 1000);
+    const id = setInterval(() => { refreshReservations(); refreshWaitlist(); refreshAlerts(); }, 2 * 60 * 1000);
     return () => clearInterval(id);
   }, [screen === "login"]);
 
   const navigate = (s: Screen) => {
     if (s !== "book") setBookPreset(null);
-    if (s === "my-reservations") refreshWaitlist();
+    if (s === "home") refreshReservations();
+    if (s === "book") refreshReservations();
+    if (s === "my-reservations") { refreshReservations(); refreshWaitlist(); }
     if (s === "waitlist-notification") { refreshWaitlist(); refreshAlerts(); }
     setScreen(s);
   };
@@ -1594,6 +1608,7 @@ export default function App() {
       await api.cancelReservation(cancelTarget.id);
       setReservations(prev => prev.filter(r => r.id !== cancelTarget.id));
       setAlerts(prev => prev.filter(a => a.reservation !== cancelTarget.id));
+      refreshReservations();
       // A cancellation may have triggered a waiting-list notification for
       // someone else, but it could also affect *this* student if they were
       // waiting on a different slot that just opened up — refresh in the background.
@@ -1605,7 +1620,8 @@ export default function App() {
   };
 
   const handleBooked = (r: Reservation) => {
-    setReservations(prev => [...prev, r]);
+    setReservations(prev => [...prev.filter(x => x.id !== r.id), r]);
+    refreshReservations();
     refreshWaitlist();
     refreshAlerts();
   };

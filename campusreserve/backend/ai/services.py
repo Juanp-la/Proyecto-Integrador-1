@@ -289,9 +289,29 @@ def invalidate_recommendations():
 
 # ─── Daily weather report ────────────────────────────────────────────────────────
 
+LOCATION_NAME = "Medellín"
+GOOD_RAIN_PROBABILITY = 40  # below this %, an hour counts as a good time to play outside
+
+
+def _r(x):
+    return round(x) if isinstance(x, (int, float)) else x
+
+
 def daily_weather_report():
-    today = timezone.localdate()
-    cache_key = f"ai:weather-report:{today.isoformat()}"
+    """
+    Weather report for Medellín (EAFIT campus).
+
+    The numbers are computed here from Open-Meteo; the AI only writes the text.
+    - "Now" uses Open-Meteo's *current* conditions (not the daily code, which
+      is the most severe condition of the whole day: in Medellín that's almost
+      always an afternoon storm, so it looked stormy even when it was sunny).
+    - Only the hours that are still ahead are analysed. After 19:00 the report
+      switches to tomorrow.
+    """
+    now = timezone.localtime()
+    is_tomorrow = now.hour >= 19
+    target = now.date() + timedelta(days=1) if is_tomorrow else now.date()
+    cache_key = f"ai:weather-report:{now.date().isoformat()}:{now.hour}"
     cached = cache.get(cache_key)
     if cached:
         return cached
@@ -300,31 +320,69 @@ def daily_weather_report():
     if not forecast:
         return {
             "available": False,
-            "date": today.isoformat(),
+            "location": LOCATION_NAME,
+            "date": target.isoformat(),
             "summary": "No se pudo consultar el clima en este momento.",
             "source": "fallback",
         }
 
-    day = forecast["daily"].get(today.isoformat(), {})
-    hours = weather.hours_for(forecast, today, time(6), time(19))
-    label, icon = weather.describe(day.get("weather_code"))
+    day = forecast["daily"].get(target.isoformat(), {})
+    first_hour = 6 if is_tomorrow else max(6, now.hour)
+    hours = weather.hours_for(forecast, target, time(min(first_hour, 18)), time(19))
+
+    def label(code):
+        return weather.describe(code)[0]
+
     bad_hours = [h["hour"] for h in hours if weather.is_bad_hour(h)]
-    good_hours = [h["hour"] for h in hours if not weather.is_bad_hour(h) and h["precipitation_probability"] < 30]
+    good_hours = [
+        h["hour"] for h in hours
+        if not weather.is_bad_hour(h) and h["precipitation_probability"] < GOOD_RAIN_PROBABILITY
+    ]
+    if not good_hours:  # rainy day: suggest the least rainy hours that aren't storms
+        calmer = sorted((h for h in hours if not weather.is_bad_hour(h)),
+                        key=lambda h: h["precipitation_probability"])
+        good_hours = sorted(h["hour"] for h in calmer[:3])
+    rain_ahead = max((h["precipitation_probability"] for h in hours), default=0)
+
+    # Headline: current conditions today; most common daytime condition tomorrow.
+    current = forecast.get("current") if not is_tomorrow else None
+    if current and current.get("weather_code") is not None:
+        cond_label, cond_icon = weather.describe(current["weather_code"])
+        if current.get("is_day") == 0 and current["weather_code"] in (0, 1):
+            cond_icon = "🌙"
+    else:
+        codes = Counter(h["weather_code"] for h in hours)
+        dominant = codes.most_common(1)[0][0] if codes else day.get("weather_code")
+        cond_label, cond_icon = weather.describe(dominant)
 
     report = {
         "available": True,
-        "date": today.isoformat(),
-        "condition": label,
-        "icon": icon,
-        "temp_max": day.get("temp_max"),
-        "temp_min": day.get("temp_min"),
-        "precipitation_probability_max": day.get("precipitation_probability_max"),
+        "location": LOCATION_NAME,
+        "date": target.isoformat(),
+        "day_label": "mañana" if is_tomorrow else "hoy",
+        "condition": cond_label,
+        "icon": cond_icon,
+        "current": (
+            {
+                "temperature": _r(current.get("temperature")),
+                "apparent_temperature": _r(current.get("apparent_temperature")),
+                "humidity": _r(current.get("humidity")),
+                "condition": cond_label,
+                "icon": cond_icon,
+            }
+            if current else None
+        ),
+        "temp_max": _r(day.get("temp_max")),
+        "temp_min": _r(day.get("temp_min")),
+        # Max rain chance in the hours that are still ahead (not the whole day).
+        "precipitation_probability_max": rain_ahead,
         "hourly": [
             {
                 "hour": h["hour"],
-                "temperature": h["temperature"],
+                "temperature": _r(h["temperature"]),
                 "precipitation_probability": h["precipitation_probability"],
                 "icon": weather.describe(h["weather_code"])[1],
+                "condition": label(h["weather_code"]),
                 "bad": weather.is_bad_hour(h),
             }
             for h in hours
@@ -332,36 +390,84 @@ def daily_weather_report():
         "bad_hours": bad_hours,
     }
 
+    ai_input = {
+        "ciudad": f"{LOCATION_NAME} (campus EAFIT)",
+        "reporte_para": report["day_label"],
+        "fecha": target.isoformat(),
+        "hora_actual": now.strftime("%H:%M"),
+        "ahora": (
+            {
+                "condicion": cond_label,
+                "temperatura_c": report["current"]["temperature"],
+                "sensacion_termica_c": report["current"]["apparent_temperature"],
+                "humedad_pct": report["current"]["humidity"],
+            }
+            if report["current"] else None
+        ),
+        "temperatura_min_c": report["temp_min"],
+        "temperatura_max_c": report["temp_max"],
+        "horas": [
+            {
+                "franja": f"{h['hour']}-{int(h['hour'][:2]) + 1:02d}:00",
+                "condicion": label(h["weather_code"]),
+                "temperatura_c": _r(h["temperature"]),
+                "prob_lluvia_pct": h["precipitation_probability"],
+                "lluvia_mm": h["precipitation"],
+            }
+            for h in hours
+        ],
+        "horas_buenas_calculadas": good_hours,
+        "horas_con_mal_clima": bad_hours,
+    }
     ai = ask_json(
         SYSTEM_PROMPT,
-        f"Pronóstico de hoy ({WEEKDAYS_ES[today.weekday()]} {today.isoformat()}) para el campus EAFIT, "
-        "por hora entre 06:00 y 19:00:\n"
-        f"{json.dumps(hours, ensure_ascii=False)}\n"
-        f"Resumen diario: {json.dumps(day, ensure_ascii=False)}\n\n"
-        "Escribe un reporte del clima para deportistas: cómo estará el día, cuáles son las "
-        "mejores horas para jugar en canchas al aire libre y una recomendación práctica "
-        "(hidratación, llevar impermeable, preferir canchas cubiertas, etc.). Formato:\n"
-        '{"summary": "2-3 frases", "best_hours": ["HH:00"], "advice": "1 frase"}',
+        "Datos REALES del pronóstico (Open-Meteo) para jugar en canchas al aire libre:\n"
+        f"{json.dumps(ai_input, ensure_ascii=False)}\n\n"
+        "Escribe el reporte del clima de " + report["day_label"] + " en Medellín. Reglas:\n"
+        "- Habla solo de las franjas listadas (son las que faltan del día); no menciones horas que ya pasaron.\n"
+        "- Usa exactamente las cifras dadas (temperaturas y % de lluvia); no inventes datos.\n"
+        "- best_hours debe ser un subconjunto de horas_buenas_calculadas (formato HH:00).\n"
+        "- Si hay horas_con_mal_clima, menciónalas.\n"
+        "Formato:\n"
+        '{"summary": "2-3 frases", "best_hours": ["HH:00"], "advice": "1 frase práctica"}',
+        temperature=0.2,
     )
-    if ai and ai.get("summary"):
+    if ai and isinstance(ai.get("summary"), str) and ai["summary"].strip():
+        allowed = set(good_hours)
+        best = [h for h in ai.get("best_hours", []) if isinstance(h, str) and h[:5] in allowed]
         report.update({
             "source": "ai",
-            "summary": str(ai["summary"])[:500],
-            "best_hours": [h for h in ai.get("best_hours", []) if isinstance(h, str)][:5],
+            "summary": ai["summary"].strip()[:500],
+            "best_hours": [h[:5] for h in best][:5] or good_hours[:5],
             "advice": str(ai.get("advice", ""))[:300],
         })
     else:
-        rain_text = (
-            f"Hay riesgo de lluvia fuerte a las {', '.join(bad_hours[:4])}."
-            if bad_hours else "No se espera lluvia fuerte durante el día."
-        )
-        report.update({
-            "source": "fallback",
-            "summary": f"{label} hoy, entre {day.get('temp_min')}°C y {day.get('temp_max')}°C. {rain_text}",
-            "best_hours": good_hours[:5],
-            "advice": "Si llueve, prefiere las canchas cubiertas." if bad_hours
-                      else "Buen día para jugar al aire libre; lleva agua.",
-        })
+        report.update({"source": "fallback", **_fallback_weather_text(report, good_hours, bad_hours)})
 
-    cache.set(cache_key, report, 60 * 60)
+    cache.set(cache_key, report, 20 * 60)
     return report
+
+
+def _fallback_weather_text(report, good_hours, bad_hours):
+    parts = []
+    cur = report.get("current")
+    if cur:
+        parts.append(
+            f"Ahora en {LOCATION_NAME}: {cur['condition'].lower()}, {cur['temperature']}°C "
+            f"(sensación {cur['apparent_temperature']}°C)."
+        )
+    parts.append(f"Temperatura de {report['day_label']} entre {report['temp_min']}°C y {report['temp_max']}°C.")
+    if not report["hourly"]:
+        parts.append("Ya no quedan horarios de cancha por hoy.")
+    elif bad_hours:
+        parts.append(f"Hay riesgo de lluvia fuerte o tormenta a las {', '.join(bad_hours[:4])}.")
+    else:
+        parts.append(f"Probabilidad de lluvia máxima de {report['precipitation_probability_max']}% en lo que queda del día.")
+    return {
+        "summary": " ".join(parts),
+        "best_hours": good_hours[:5],
+        "advice": (
+            "Si llueve, prefiere las canchas cubiertas." if bad_hours
+            else "Buen momento para jugar al aire libre; lleva agua."
+        ),
+    }

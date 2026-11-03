@@ -11,7 +11,7 @@ import json
 import logging
 import urllib.parse
 import urllib.request
-from datetime import date, time
+from datetime import date, time, timedelta
 
 from django.conf import settings
 from django.core.cache import cache
@@ -76,6 +76,7 @@ def fetch_forecast():
         "longitude": settings.CAMPUS_LONGITUDE,
         "timezone": settings.TIME_ZONE,
         "forecast_days": 7,
+        "current": "temperature_2m,apparent_temperature,relative_humidity_2m,precipitation,weather_code,is_day,wind_speed_10m",
         "hourly": "temperature_2m,precipitation_probability,precipitation,weather_code,wind_speed_10m",
         "daily": "weather_code,temperature_2m_max,temperature_2m_min,precipitation_sum,precipitation_probability_max",
     }
@@ -113,21 +114,42 @@ def parse_open_meteo(raw):
             "precipitation_sum": d["precipitation_sum"][i] or 0,
             "precipitation_probability_max": d["precipitation_probability_max"][i] or 0,
         }
-    return {"hourly": hourly, "daily": daily}
+    c = raw.get("current") or {}
+    current = None
+    if c:
+        current = {
+            "time": c.get("time"),
+            "temperature": c.get("temperature_2m"),
+            "apparent_temperature": c.get("apparent_temperature"),
+            "humidity": c.get("relative_humidity_2m"),
+            "precipitation": c.get("precipitation") or 0,
+            "weather_code": c.get("weather_code"),
+            "is_day": c.get("is_day"),
+            "wind_speed": c.get("wind_speed_10m"),
+        }
+    return {"hourly": hourly, "daily": daily, "current": current}
 
 
 def hours_for(forecast, day: date, start: time, end: time):
-    """Hourly entries covering [start, end) on `day`."""
+    """
+    One entry per hour window inside [start, end) on `day`.
+
+    Open-Meteo reports precipitation and rain probability for the PRECEDING
+    hour: the value stamped "18:00" is the rain between 17:00 and 18:00. So the
+    window 17:00-18:00 reads the "18:00" entry. Each returned entry is labelled
+    with the start of its window ("hour": "17:00").
+    """
     if not forecast:
         return []
     result = []
-    hour = start.hour
-    last = end.hour if end.minute == 0 else end.hour + 1
-    while hour < last:
-        key = f"{day.isoformat()}T{hour:02d}:00"
+    first = start.hour
+    last = end.hour if end.minute == 0 else end.hour + 1  # exclusive
+    for window_start in range(first, last):
+        key = f"{day.isoformat()}T{window_start + 1:02d}:00"
+        if window_start + 1 == 24:
+            key = f"{(day + timedelta(days=1)).isoformat()}T00:00"
         if key in forecast["hourly"]:
-            result.append({"hour": f"{hour:02d}:00", **forecast["hourly"][key]})
-        hour += 1
+            result.append({"hour": f"{window_start:02d}:00", **forecast["hourly"][key]})
     return result
 
 
