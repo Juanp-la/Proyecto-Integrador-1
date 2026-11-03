@@ -1,6 +1,8 @@
 from django.contrib import admin
-from django.urls import include, path
+from django.urls import include, path, re_path
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
+
+from .spa import frontend
 
 urlpatterns = [
     path("admin/", admin.site.urls),
@@ -12,4 +14,6 @@ urlpatterns = [
     path("api/waitlist/", include("waitlist.urls")),
     path("api/ai/", include("ai.urls")),
     path("api/notifications/", include("notifications.urls")),
+    # Everything that isn't the API or the admin -> React app (must be last).
+    re_path(r"^(?!api(?:/|$)|admin(?:/|$)|static/)(?P<path>.*)$", frontend, name="frontend"),
 ]
