@@ -24,9 +24,11 @@ export function setToken(token: string | null) {
 
 export class ApiError extends Error {
   status: number;
-  constructor(status: number, message: string) {
+  code?: string;
+  constructor(status: number, message: string, code?: string) {
     super(message);
     this.status = status;
+    this.code = code;
   }
 }
 
@@ -42,13 +44,15 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
 
   if (!res.ok) {
     let detail = res.statusText;
+    let code: string | undefined;
     try {
       const body = await res.json();
       detail = body.detail || JSON.stringify(body);
+      code = body.code;
     } catch {
       // response body wasn't JSON — fall back to statusText
     }
-    throw new ApiError(res.status, detail);
+    throw new ApiError(res.status, detail, code);
   }
 
   if (res.status === 204) return undefined as T;
@@ -66,6 +70,7 @@ export interface ApiCourt {
   surface: string;
   image_ref: string;
   is_active: boolean;
+  is_outdoor: boolean;
   status?: "available" | "reserved";
 }
 
@@ -123,6 +128,10 @@ export async function register(input: {
     method: "POST",
     body: JSON.stringify(input),
   });
+}
+
+export function logout() {
+  setToken(null);
 }
 
 export async function me(): Promise<ApiUser> {
@@ -185,4 +194,99 @@ export async function joinWaitlist(input: {
 
 export async function confirmWaitlistOffer(id: number): Promise<ApiReservation> {
   return request<ApiReservation>(`/waitlist/${id}/confirm/`, { method: "POST" });
+}
+
+export async function leaveWaitlist(id: number): Promise<ApiWaitlistEntry> {
+  return request<ApiWaitlistEntry>(`/waitlist/${id}/leave/`, { method: "POST" });
+}
+
+// ─── AI: recommendations + weather ─────────────────────────────────────────
+
+export type AiSource = "ai" | "fallback";
+
+export interface PopularCourtItem {
+  court_id: number;
+  name: string;
+  sport: string;
+  sport_code: string;
+  location: string;
+  reservations: number;
+  waitlist_joins: number;
+  peak_times: string[];
+  reason: string;
+}
+
+export interface QuietSlotItem {
+  court_id: number;
+  court_name: string;
+  sport: string;
+  sport_code: string;
+  date: string;
+  weekday: string;
+  start_time: string;
+  end_time: string;
+  usage_score: number;
+  rain_probability: number | null;
+  reason: string;
+}
+
+export interface Recommendations<T> {
+  source: AiSource;
+  summary: string;
+  items: T[];
+}
+
+export interface WeatherReport {
+  available: boolean;
+  date: string;
+  source: AiSource;
+  summary: string;
+  condition?: string;
+  icon?: string;
+  temp_max?: number;
+  temp_min?: number;
+  precipitation_probability_max?: number;
+  best_hours?: string[];
+  advice?: string;
+  bad_hours?: string[];
+  hourly?: { hour: string; temperature: number; precipitation_probability: number; icon: string; bad: boolean }[];
+}
+
+export async function popularCourts(): Promise<Recommendations<PopularCourtItem>> {
+  return request("/ai/recommendations/popular/");
+}
+
+export async function quietSlots(): Promise<Recommendations<QuietSlotItem>> {
+  return request("/ai/recommendations/quiet/");
+}
+
+export async function weatherToday(): Promise<WeatherReport> {
+  return request("/ai/weather/today/");
+}
+
+// ─── Notifications (weather alerts) ─────────────────────────────────────────
+
+export interface ApiNotification {
+  id: number;
+  kind: "weather_alert";
+  title: string;
+  message: string;
+  reservation: number | null;
+  reservation_detail: ApiReservation | null;
+  data: { label?: string; icon?: string; hour?: string; precipitation_probability?: number; source?: AiSource };
+  is_read: boolean;
+  is_resolved: boolean;
+  created_at: string;
+}
+
+export async function myNotifications(): Promise<ApiNotification[]> {
+  return request<ApiNotification[]>("/notifications/");
+}
+
+export async function dismissNotification(id: number): Promise<ApiNotification> {
+  return request<ApiNotification>(`/notifications/${id}/dismiss/`, { method: "POST" });
+}
+
+export async function cancelReservationFromNotification(id: number): Promise<ApiNotification> {
+  return request<ApiNotification>(`/notifications/${id}/cancel-reservation/`, { method: "POST" });
 }

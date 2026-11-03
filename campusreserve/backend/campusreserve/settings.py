@@ -32,6 +32,8 @@ INSTALLED_APPS = [
     "courts",
     "reservations",
     "waitlist",
+    "ai",
+    "notifications",
 ]
 
 MIDDLEWARE = [
@@ -124,3 +126,33 @@ CELERY_TIMEZONE = TIME_ZONE
 # How long a student has to confirm a waiting-list offer before it expires
 # and is offered to the next student in the queue (FR18 / HU8).
 WAITLIST_CONFIRMATION_WINDOW_MINUTES = 10
+
+# ─── Celery beat: periodic weather check (optional) ──────────────────────────
+# Run `celery -A campusreserve beat` to enable it. Even without beat, alerts
+# are generated when a student opens their notifications.
+CELERY_BEAT_SCHEDULE = {
+    "check-weather-alerts": {
+        "task": "notifications.tasks.check_weather_alerts",
+        "schedule": 60 * 60,  # every hour
+    },
+}
+
+# ─── AI (recommendations + weather report) ────────────────────────────────────
+# Any OpenAI-compatible chat API. Default: Google Gemini (free key at
+# https://aistudio.google.com/apikey). Leave AI_API_KEY empty to use the
+# rule-based fallback (everything still works, just without AI text).
+AI_API_KEY = os.environ.get("AI_API_KEY", "")
+AI_BASE_URL = os.environ.get(
+    "AI_BASE_URL", "https://generativelanguage.googleapis.com/v1beta/openai"
+)
+AI_MODEL = os.environ.get("AI_MODEL", "gemini-2.5-flash")
+AI_TIMEOUT_SECONDS = int(os.environ.get("AI_TIMEOUT_SECONDS", "20"))
+
+# ─── Weather (Open-Meteo, free, no key) ───────────────────────────────────────
+# Default coordinates: Universidad EAFIT, Medellín.
+CAMPUS_LATITUDE = float(os.environ.get("CAMPUS_LATITUDE", "6.2006"))
+CAMPUS_LONGITUDE = float(os.environ.get("CAMPUS_LONGITUDE", "-75.5783"))
+# An hour counts as "bad weather" if rain probability >= this % ...
+WEATHER_BAD_PROBABILITY = int(os.environ.get("WEATHER_BAD_PROBABILITY", "70"))
+# ... or expected rain >= this many mm (storms and heavy rain always count).
+WEATHER_BAD_PRECIPITATION_MM = float(os.environ.get("WEATHER_BAD_PRECIPITATION_MM", "2.0"))
