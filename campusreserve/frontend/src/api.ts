@@ -84,6 +84,7 @@ export interface ApiReservation {
   status: "confirmed" | "cancelled";
   created_at: string;
   cancelled_at: string | null;
+  is_active: boolean; // computed by the backend in Bogotá time
 }
 
 export interface ApiWaitlistEntry {
@@ -238,6 +239,15 @@ export interface Recommendations<T> {
 
 export interface WeatherReport {
   available: boolean;
+  location?: string;
+  day_label?: "hoy" | "mañana";
+  current?: {
+    temperature: number;
+    apparent_temperature: number;
+    humidity: number;
+    condition: string;
+    icon: string;
+  } | null;
   date: string;
   source: AiSource;
   summary: string;
@@ -249,7 +259,7 @@ export interface WeatherReport {
   best_hours?: string[];
   advice?: string;
   bad_hours?: string[];
-  hourly?: { hour: string; temperature: number; precipitation_probability: number; icon: string; bad: boolean }[];
+  hourly?: { hour: string; temperature: number; precipitation_probability: number; icon: string; condition?: string; bad: boolean }[];
 }
 
 export async function popularCourts(): Promise<Recommendations<PopularCourtItem>> {

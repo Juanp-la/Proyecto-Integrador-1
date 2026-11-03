@@ -18,7 +18,8 @@ User = get_user_model()
 NO_AI = override_settings(AI_API_KEY="")
 
 
-def fake_forecast(day, bad_hours=(), code=63):
+def fake_forecast(day, bad_hours=(), code=63, current_code=None):
+    """bad_hours are Open-Meteo timestamps (rain of the PRECEDING hour): 18 = window 17:00-18:00."""
     hourly = {}
     for hour in range(0, 24):
         bad = hour in bad_hours
@@ -33,7 +34,11 @@ def fake_forecast(day, bad_hours=(), code=63):
         "weather_code": code if bad_hours else 1, "temp_max": 27, "temp_min": 17,
         "precipitation_sum": 8 if bad_hours else 0, "precipitation_probability_max": 90 if bad_hours else 5,
     }}
-    return {"hourly": hourly, "daily": daily}
+    current = None
+    if current_code is not None:
+        current = {"time": f"{day.isoformat()}T08:00", "temperature": 21.4, "apparent_temperature": 22.1,
+                   "humidity": 70, "precipitation": 0, "weather_code": current_code, "is_day": 1, "wind_speed": 4}
+    return {"hourly": hourly, "daily": daily, "current": current}
 
 
 class BaseCase(TestCase):
@@ -167,18 +172,65 @@ class RecommendationTests(BaseCase):
 
 @NO_AI
 class WeatherTests(BaseCase):
-    def test_daily_report_fallback(self):
+    def _at(self, hour):
+        """Freeze 'now' at today HH:10 Bogotá time."""
+        fixed = timezone.localtime().replace(hour=hour, minute=10, second=0, microsecond=0)
+        return mock.patch("ai.services.timezone.localtime", return_value=fixed)
+
+    def test_daily_report_uses_current_conditions_not_daily_worst(self):
         today = timezone.localdate()
-        with mock.patch("ai.weather.fetch_forecast", return_value=fake_forecast(today, bad_hours=[15, 16])):
+        # Daily code = storm (Open-Meteo's daily value is the worst of the day), but right now it's clear.
+        forecast = fake_forecast(today, bad_hours=[16, 17], code=95, current_code=1)
+        with self._at(8), mock.patch("ai.weather.fetch_forecast", return_value=forecast):
             data = self.client.get("/api/ai/weather/today/").data
         self.assertTrue(data["available"])
-        self.assertIn("15:00", data["bad_hours"])
+        self.assertEqual(data["location"], "Medellín")
+        self.assertEqual(data["condition"], "Mayormente despejado")
+        self.assertEqual(data["current"]["temperature"], 21)
+        # keys 16 and 17 = windows 15:00-16:00 and 16:00-17:00
+        self.assertEqual(data["bad_hours"], ["15:00", "16:00"])
+        self.assertEqual(len(data["hourly"]), 11)  # 08:00 ... 18:00
+        self.assertNotIn("15:00", data["best_hours"])
+
+    def test_daily_report_skips_past_hours(self):
+        today = timezone.localdate()
+        with self._at(14), mock.patch("ai.weather.fetch_forecast", return_value=fake_forecast(today, current_code=2)):
+            data = self.client.get("/api/ai/weather/today/").data
+        self.assertEqual(data["hourly"][0]["hour"], "14:00")
+        self.assertTrue(all(h >= "14:00" for h in data["best_hours"]))
+
+    def test_after_19h_reports_tomorrow(self):
+        tomorrow = timezone.localdate() + timedelta(days=1)
+        with self._at(20), mock.patch("ai.weather.fetch_forecast", return_value=fake_forecast(tomorrow)):
+            data = self.client.get("/api/ai/weather/today/").data
+        self.assertEqual(data["day_label"], "mañana")
+        self.assertEqual(data["date"], tomorrow.isoformat())
         self.assertEqual(len(data["hourly"]), 13)
+
+    @override_settings(AI_API_KEY="test")
+    def test_ai_best_hours_are_limited_to_calculated_ones(self):
+        today = timezone.localdate()
+        answer = {"summary": "Día bueno.", "best_hours": ["09:00", "16:00", "03:00"], "advice": "Agua."}
+        with self._at(8), mock.patch("ai.weather.fetch_forecast",
+                                     return_value=fake_forecast(today, bad_hours=[17], code=95, current_code=0)), \
+                mock.patch("ai.services.ask_json", return_value=answer):
+            data = self.client.get("/api/ai/weather/today/").data
+        self.assertEqual(data["source"], "ai")
+        self.assertEqual(data["best_hours"], ["09:00"])  # 16:00 is stormy, 03:00 isn't a slot
+
+    def test_hours_for_uses_preceding_hour_values(self):
+        from datetime import time as t
+        from ai.weather import hours_for
+        f = fake_forecast(self.tomorrow, bad_hours=[18])
+        h = hours_for(f, self.tomorrow, t(17), t(18))
+        self.assertEqual(len(h), 1)
+        self.assertEqual(h[0]["hour"], "17:00")
+        self.assertEqual(h[0]["precipitation_probability"], 90)
 
     def test_bad_weather_creates_alert_and_cancel_from_notification(self):
         r = self.book(self.soccer).data
         with mock.patch("ai.weather.fetch_forecast",
-                        return_value=fake_forecast(self.tomorrow, bad_hours=[17], code=95)):
+                        return_value=fake_forecast(self.tomorrow, bad_hours=[18], code=95)):
             notes = self.client.get("/api/notifications/").data
             again = self.client.get("/api/notifications/").data  # idempotent
         self.assertEqual(len(notes), 1)
@@ -193,13 +245,13 @@ class WeatherTests(BaseCase):
     def test_indoor_and_good_weather_get_no_alert(self):
         self.book(self.indoor)
         with mock.patch("ai.weather.fetch_forecast",
-                        return_value=fake_forecast(self.tomorrow, bad_hours=[17])):
+                        return_value=fake_forecast(self.tomorrow, bad_hours=[18])):
             self.assertEqual(self.client.get("/api/notifications/").data, [])
 
     def test_dismiss_keeps_reservation(self):
         r = self.book(self.soccer).data
         with mock.patch("ai.weather.fetch_forecast",
-                        return_value=fake_forecast(self.tomorrow, bad_hours=[17])):
+                        return_value=fake_forecast(self.tomorrow, bad_hours=[18])):
             n = self.client.get("/api/notifications/").data[0]
             self.client.post(f"/api/notifications/{n['id']}/dismiss/")
             self.assertEqual(self.client.get("/api/notifications/").data, [])
