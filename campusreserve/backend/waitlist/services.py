@@ -12,6 +12,13 @@ ACTIVE_STATUSES = ["waiting", "notified"]
 @transaction.atomic
 def join_waitlist(*, student, court, reservation_date, start_time, end_time):
     """HU6 — Join a waiting list for a fully booked court/date/slot."""
+    from reservations.services import ActiveReservationExistsError, ensure_no_active_reservation
+
+    try:
+        ensure_no_active_reservation(student)
+    except ActiveReservationExistsError as exc:
+        raise ValidationError(str(exc))
+
     already_queued = WaitingListEntry.objects.filter(
         student=student,
         court=court,
@@ -90,7 +97,11 @@ def confirm_from_waitlist(*, entry, requesting_user):
     if entry.expires_at and timezone.now() > entry.expires_at:
         raise ValidationError("This waiting-list offer has expired.")
 
-    from reservations.services import ReservationConflictError, create_reservation
+    from reservations.services import (
+        ActiveReservationExistsError,
+        ReservationConflictError,
+        create_reservation,
+    )
 
     try:
         reservation = create_reservation(
@@ -100,7 +111,7 @@ def confirm_from_waitlist(*, entry, requesting_user):
             start_time=entry.start_time,
             end_time=entry.end_time,
         )
-    except ReservationConflictError as exc:
+    except (ReservationConflictError, ActiveReservationExistsError) as exc:
         raise ValidationError(str(exc))
 
     entry.status = "confirmed"
@@ -134,3 +145,42 @@ def expire_and_advance(*, entry_id):
         start_time=entry.start_time,
         end_time=entry.end_time,
     )
+
+
+@transaction.atomic
+def leave_waitlist(*, entry, requesting_user):
+    """
+    The student leaves a waiting list (or declines an offer they were notified about).
+    - Students behind them move up one position.
+    - If they had been notified, the spot is offered right away to the next in line (HU7).
+    """
+    entry = WaitingListEntry.objects.select_for_update().get(pk=entry.pk)
+    if entry.student_id != requesting_user.id:
+        raise ValidationError("Esta entrada de la lista de espera no es tuya.")
+    if entry.status not in ACTIVE_STATUSES:
+        raise ValidationError("Ya no estás en esta lista de espera.")
+
+    was_notified = entry.status == "notified"
+    entry.status = "cancelled"
+    entry.save(update_fields=["status"])
+
+    behind = WaitingListEntry.objects.select_for_update().filter(
+        court=entry.court,
+        reservation_date=entry.reservation_date,
+        start_time=entry.start_time,
+        end_time=entry.end_time,
+        status__in=ACTIVE_STATUSES,
+        queue_position__gt=entry.queue_position,
+    ).order_by("queue_position")
+    for other in behind:
+        other.queue_position -= 1
+        other.save(update_fields=["queue_position"])
+
+    if was_notified:
+        notify_next_in_queue(
+            court=entry.court,
+            reservation_date=entry.reservation_date,
+            start_time=entry.start_time,
+            end_time=entry.end_time,
+        )
+    return entry

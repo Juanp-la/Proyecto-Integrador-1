@@ -46,13 +46,37 @@ const MONTH_LABELS = [
   "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre",
 ];
 
+// Local YYYY-MM-DD (toISOString() is UTC: after 7 pm in Colombia it returns tomorrow).
+function localIsoDate(d: Date) {
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+function todayLabel() {
+  const d = new Date();
+  const weekdays = ["Domingo", "Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado"];
+  const semester = d.getMonth() < 6 ? "1" : "2";
+  return `${weekdays[d.getDay()]}, ${d.getDate()} de ${MONTH_LABELS[d.getMonth()]} de ${d.getFullYear()} · Semestre ${d.getFullYear()}-${semester}`;
+}
+
+// A reservation is "active" until its end time has passed (one active reservation at a time).
+function isActiveReservation(r: { date: string; time: string }) {
+  const today = localIsoDate(new Date());
+  if (r.date > today) return true;
+  if (r.date < today) return false;
+  const end = r.time.split(" – ")[1] || "00:00";
+  const now = new Date();
+  const nowHHMM = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
+  return end > nowHHMM;
+}
+
 function buildDays() {
   const days = [];
   const today = new Date();
   for (let i = 0; i < 6; i++) {
     const d = new Date(today);
     d.setDate(today.getDate() + i);
-    const iso = d.toISOString().slice(0, 10); // YYYY-MM-DD
+    const iso = localIsoDate(d); // YYYY-MM-DD
     const weekdayLabel = WEEKDAY_LABELS[d.getDay()];
     days.push({
       key: iso,
@@ -142,7 +166,13 @@ function Logo() {
   );
 }
 
-function Navbar({ onNavigate, active, userName }: { onNavigate: (s: Screen) => void; active: Screen; userName: string }) {
+function Navbar({ onNavigate, active, userName, onLogout, notificationCount }: {
+  onNavigate: (s: Screen) => void;
+  active: Screen;
+  userName: string;
+  onLogout: () => void;
+  notificationCount: number;
+}) {
   const initials = userName.split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase();
   const link = (s: Screen, label: string) => (
     <button
@@ -165,15 +195,31 @@ function Navbar({ onNavigate, active, userName }: { onNavigate: (s: Screen) => v
         {link("home", "Inicio")}
         {link("my-reservations", "Mis reservas")}
         {link("book", "Reservar")}
-        {link("waitlist-notification", "Notificaciones")}
+        <div className="relative">
+          {link("waitlist-notification", "Notificaciones")}
+          {notificationCount > 0 && (
+            <span className="absolute -top-2 -right-4 min-w-[18px] h-[18px] px-1 rounded-full bg-[#C0392B] text-white text-[10px] font-bold flex items-center justify-center">
+              {notificationCount}
+            </span>
+          )}
+        </div>
         <div
-          className="w-9 h-9 rounded-full flex items-center justify-center text-white font-semibold text-sm cursor-pointer transition-colors"
+          className="w-9 h-9 rounded-full flex items-center justify-center text-white font-semibold text-sm"
           style={{ background: A }}
-          onMouseEnter={e => (e.currentTarget.style.background = AH)}
-          onMouseLeave={e => (e.currentTarget.style.background = A)}
+          title={userName}
         >
           {initials || "?"}
         </div>
+        <button
+          onClick={onLogout}
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium text-white/70 border border-white/20 hover:text-white hover:border-white/50 transition-colors cursor-pointer"
+          title="Cerrar sesión"
+        >
+          <svg width="15" height="15" viewBox="0 0 16 16" fill="none">
+            <path d="M6 14H3a1 1 0 01-1-1V3a1 1 0 011-1h3M10.5 11.5L14 8l-3.5-3.5M14 8H6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+          Salir
+        </button>
       </div>
     </nav>
   );
@@ -335,9 +381,193 @@ function LoginScreen({ onLogin }: { onLogin: () => void }) {
   );
 }
 
+// ─── AI widgets (weather + recommendations) ───────────────────────────────────
+
+function AiBadge({ source }: { source: api.AiSource }) {
+  return source === "ai" ? (
+    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold" style={{ background: ABG, color: ATXT }}>
+      ✨ Generado con IA
+    </span>
+  ) : (
+    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-[#F4F6FA] text-[#6B7A99]">
+      Calculado con datos de uso
+    </span>
+  );
+}
+
+function formatShortDate(iso: string) {
+  const [y, m, d] = iso.split("-").map(Number);
+  const date = new Date(y, m - 1, d);
+  return `${WEEKDAY_LABELS[date.getDay()]} ${d} de ${MONTH_LABELS[m - 1]}`;
+}
+
+function WidgetMessage({ text }: { text: string }) {
+  return (
+    <div className="bg-white rounded-2xl border border-[#E8ECF4] p-6 text-center">
+      <p className="text-sm text-[#6B7A99]">{text}</p>
+    </div>
+  );
+}
+
+function WeatherCard({ report, loading }: { report: api.WeatherReport | null; loading: boolean }) {
+  if (loading) return <WidgetMessage text="Consultando el clima de hoy…" />;
+  if (!report || !report.available) return <WidgetMessage text="No se pudo consultar el clima en este momento." />;
+
+  return (
+    <div className="bg-white rounded-2xl border border-[#E8ECF4] shadow-sm p-5">
+      <div className="flex items-start gap-4">
+        <div className="text-5xl leading-none">{report.icon}</div>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <p className="text-base font-bold text-[#111B30]">{report.condition}</p>
+            <AiBadge source={report.source} />
+          </div>
+          <p className="text-xs text-[#6B7A99] mt-0.5">
+            {report.temp_min}°C – {report.temp_max}°C · Lluvia hasta {report.precipitation_probability_max}%
+          </p>
+          <p className="text-sm text-[#111B30] mt-3 leading-relaxed">{report.summary}</p>
+          {report.advice && <p className="text-xs text-[#6B7A99] mt-2">💡 {report.advice}</p>}
+          {report.best_hours && report.best_hours.length > 0 && (
+            <p className="text-xs mt-2" style={{ color: ATXT }}>
+              Mejores horas para jugar afuera: <strong>{report.best_hours.join(", ")}</strong>
+            </p>
+          )}
+        </div>
+      </div>
+      {report.hourly && report.hourly.length > 0 && (
+        <div className="flex gap-1.5 mt-4 overflow-x-auto pb-1">
+          {report.hourly.map(h => (
+            <div
+              key={h.hour}
+              className="flex-shrink-0 w-14 rounded-xl py-2 flex flex-col items-center"
+              style={{ background: h.bad ? "#FDEDEC" : "#F4F6FA" }}
+            >
+              <span className="text-[10px] font-semibold text-[#6B7A99]">{h.hour.slice(0, 2)}h</span>
+              <span className="text-lg">{h.icon}</span>
+              <span className="text-[11px] font-semibold text-[#111B30]">{Math.round(h.temperature)}°</span>
+              <span className={`text-[10px] ${h.bad ? "text-[#C0392B] font-semibold" : "text-[#6B7A99]"}`}>💧{h.precipitation_probability}%</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function PopularCourtsSection({ data, loading, onNavigate }: {
+  data: api.Recommendations<api.PopularCourtItem> | null;
+  loading: boolean;
+  onNavigate: (s: Screen) => void;
+}) {
+  return (
+    <div className="mb-8">
+      <div className="flex items-center justify-between mb-1">
+        <h2 className="text-lg font-bold text-[#111B30]">🔥 Canchas más populares</h2>
+        {data && <AiBadge source={data.source} />}
+      </div>
+      {data?.summary && <p className="text-xs text-[#6B7A99] mb-4">{data.summary}</p>}
+      {loading ? (
+        <WidgetMessage text="Analizando qué canchas se usan más…" />
+      ) : !data || data.items.length === 0 ? (
+        <WidgetMessage text={data?.summary || "Todavía no hay datos de uso suficientes."} />
+      ) : (
+        <div className="grid grid-cols-3 gap-3">
+          {data.items.map((item, i) => (
+            <button
+              key={item.court_id}
+              onClick={() => onNavigate("book")}
+              className="bg-white rounded-2xl border border-[#E8ECF4] p-4 text-left hover:shadow-md transition-shadow cursor-pointer"
+            >
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-[#FEF0DC] text-[#D4720A]">#{i + 1}</span>
+                <span className="text-[11px] text-[#6B7A99] text-right">
+                  {item.reservations} reservas{item.waitlist_joins > 0 && ` · ${item.waitlist_joins} en espera`}
+                </span>
+              </div>
+              <p className="text-sm font-semibold text-[#111B30] leading-snug">{item.name}</p>
+              <p className="text-xs text-[#6B7A99] mt-0.5">{sportMeta(item.sport_code).icon} {sportMeta(item.sport_code).label} · {item.location}</p>
+              <p className="text-xs text-[#111B30] mt-2 leading-relaxed">{item.reason}</p>
+              {item.peak_times.length > 0 && (
+                <p className="text-[11px] mt-2 font-medium text-[#D4720A]">Horas pico: {item.peak_times.join(", ")}</p>
+              )}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function QuietSlotsSection({ data, loading, onPick }: {
+  data: api.Recommendations<api.QuietSlotItem> | null;
+  loading: boolean;
+  onPick: (date: string, slot: string) => void;
+}) {
+  return (
+    <div className="mb-10">
+      <div className="flex items-center justify-between mb-1">
+        <h2 className="text-lg font-bold text-[#111B30]">🍃 Canchas y horarios tranquilos</h2>
+        {data && <AiBadge source={data.source} />}
+      </div>
+      <p className="text-xs text-[#6B7A99] mb-4">{data?.summary || "Horarios libres con poca gente en los próximos días."}</p>
+      {loading ? (
+        <WidgetMessage text="Buscando horarios poco usados…" />
+      ) : !data || data.items.length === 0 ? (
+        <WidgetMessage text="No encontramos horarios libres en los próximos días." />
+      ) : (
+        <div className="grid grid-cols-2 gap-3">
+          {data.items.map(item => (
+            <div key={`${item.court_id}-${item.date}-${item.start_time}`} className="bg-white rounded-2xl border border-[#E8ECF4] p-4 flex flex-col">
+              <p className="text-sm font-semibold text-[#111B30]">{sportMeta(item.sport_code).icon} {item.court_name}</p>
+              <p className="text-xs text-[#6B7A99] mt-0.5">
+                {formatShortDate(item.date)} · {item.start_time} – {item.end_time}
+                {item.rain_probability !== null && ` · 💧${item.rain_probability}%`}
+              </p>
+              <p className="text-xs text-[#111B30] mt-2 leading-relaxed flex-1">{item.reason}</p>
+              <button
+                onClick={() => onPick(item.date, `${item.start_time} – ${item.end_time}`)}
+                className="mt-3 self-start px-3 py-1.5 text-white text-xs font-semibold rounded-lg transition-colors"
+                style={{ background: A }}
+                onMouseEnter={e => (e.currentTarget.style.background = AH)}
+                onMouseLeave={e => (e.currentTarget.style.background = A)}
+              >
+                Ver este horario
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Loads one AI endpoint when the component mounts.
+function useAiData<T>(loader: () => Promise<T>) {
+  const [data, setData] = useState<T | null>(null);
+  const [loading, setLoading] = useState(true);
+  useEffect(() => {
+    let alive = true;
+    loader()
+      .then(d => { if (alive) setData(d); })
+      .catch(() => { if (alive) setData(null); })
+      .finally(() => { if (alive) setLoading(false); });
+    return () => { alive = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  return { data, loading };
+}
+
 // ─── Home Screen ──────────────────────────────────────────────────────────────
 
-function HomeScreen({ onNavigate, reservations, userName }: { onNavigate: (s: Screen) => void; reservations: Reservation[]; userName: string }) {
+function HomeScreen({ onNavigate, reservations, userName, onPickSlot }: {
+  onNavigate: (s: Screen) => void;
+  reservations: Reservation[];
+  userName: string;
+  onPickSlot: (date: string, slot: string) => void;
+}) {
+  const weather = useAiData(api.weatherToday);
+  const popular = useAiData(api.popularCourts);
+  const quiet = useAiData(api.quietSlots);
   const firstName = userName.split(" ")[0];
 
   return (
@@ -355,7 +585,7 @@ function HomeScreen({ onNavigate, reservations, userName }: { onNavigate: (s: Sc
             <span style={{ color: A }}>{firstName}</span>
           </h1>
           <p className="text-white/60 text-sm mt-2 mb-6">
-            Martes, 8 de septiembre de 2026 · Semestre 2026-2
+            {todayLabel()}
           </p>
           <button
             onClick={() => onNavigate("book")}
@@ -453,35 +683,15 @@ function HomeScreen({ onNavigate, reservations, userName }: { onNavigate: (s: Sc
           )}
         </div>
 
-        {/* Available today */}
-        <div className="mb-10">
-          <h2 className="text-lg font-bold text-[#111B30] mb-4">Canchas disponibles hoy</h2>
-          <div className="grid grid-cols-2 gap-4">
-            {[
-              { icon: "⚽", name: "Cancha de Fútbol 2", sport: "Fútbol 7", slots: 3, img: "photo-1575361204480-aadea25e6e68" },
-              { icon: "🏊", name: "Piscina Olímpica", sport: "Natación · Carril libre", slots: 5, img: "photo-1519315901367-f34ff9154487" },
-              { icon: "🏐", name: "Cancha Multiuso B", sport: "Vóley", slots: 2, img: "photo-1547347298-4074fc3086f0" },
-              { icon: "🏀", name: "Cancha Multiuso A", sport: "Básquetbol", slots: 4, img: "photo-1546519638-68e109498ffc" },
-            ].map((c) => (
-              <button key={c.name} onClick={() => onNavigate("book")}
-                className="bg-white rounded-2xl border border-[#E8ECF4] overflow-hidden hover:shadow-md transition-shadow text-left cursor-pointer group"
-              >
-                <div className="relative h-28 bg-[#1B2A4A]">
-                  <img src={`https://images.unsplash.com/${c.img}?w=400&h=200&fit=crop&auto=format`} alt={c.name}
-                    className="w-full h-full object-cover opacity-60 group-hover:opacity-70 transition-opacity" />
-                  <div className="absolute inset-0 bg-gradient-to-t from-[#111B30]/60 to-transparent" />
-                  <div className="absolute top-2.5 right-2.5">
-                    <span className="bg-[#E8F6EE] text-[#1A8A4A] text-xs font-semibold px-2 py-0.5 rounded-full">{c.slots} horarios</span>
-                  </div>
-                </div>
-                <div className="p-3.5">
-                  <p className="text-sm font-semibold text-[#111B30] truncate">{c.name}</p>
-                  <p className="text-xs text-[#6B7A99] mt-0.5">{c.sport}</p>
-                </div>
-              </button>
-            ))}
-          </div>
+        {/* Weather (AI) */}
+        <div className="mb-8">
+          <h2 className="text-lg font-bold text-[#111B30] mb-4">🌦️ Clima de hoy en el campus</h2>
+          <WeatherCard report={weather.data} loading={weather.loading} />
         </div>
+
+        {/* AI recommendations */}
+        <PopularCourtsSection data={popular.data} loading={popular.loading} onNavigate={onNavigate} />
+        <QuietSlotsSection data={quiet.data} loading={quiet.loading} onPick={onPickSlot} />
       </div>
     </div>
   );
@@ -489,12 +699,29 @@ function HomeScreen({ onNavigate, reservations, userName }: { onNavigate: (s: Sc
 
 // ─── My Reservations ──────────────────────────────────────────────────────────
 
-function MyReservationsScreen({ onNavigate, reservations, onCancel, loading }: {
+function MyReservationsScreen({ onNavigate, reservations, onCancel, loading, waitlist, onLeaveWaitlist }: {
   onNavigate: (s: Screen) => void;
   reservations: Reservation[];
   onCancel: (r: Reservation) => void;
   loading: boolean;
+  waitlist: ApiWaitlistEntry[];
+  onLeaveWaitlist: (entry: ApiWaitlistEntry) => Promise<void>;
 }) {
+  const [leavingId, setLeavingId] = useState<number | null>(null);
+  const [leaveError, setLeaveError] = useState<string | null>(null);
+
+  const leave = async (entry: ApiWaitlistEntry) => {
+    setLeavingId(entry.id);
+    setLeaveError(null);
+    try {
+      await onLeaveWaitlist(entry);
+    } catch (err) {
+      setLeaveError(err instanceof api.ApiError ? err.message : "No se pudo salir de la lista de espera.");
+    } finally {
+      setLeavingId(null);
+    }
+  };
+
   return (
     <div className="flex-1 overflow-y-auto bg-[#F4F6FA]">
       <main className="max-w-3xl mx-auto px-6 py-10">
@@ -502,6 +729,7 @@ function MyReservationsScreen({ onNavigate, reservations, onCancel, loading }: {
           <p className="text-xs font-semibold uppercase tracking-widest mb-1" style={{ color: A }}>Universidad EAFIT</p>
           <h1 className="text-3xl font-bold text-[#111B30]">Mis reservas</h1>
           <p className="text-sm text-[#6B7A99] mt-1">{reservations.length} reserva{reservations.length !== 1 ? "s" : ""} activa{reservations.length !== 1 ? "s" : ""}</p>
+          <p className="text-xs text-[#6B7A99] mt-1">Recuerda: solo puedes tener una reserva activa a la vez.</p>
         </div>
 
         {loading ? (
@@ -545,6 +773,48 @@ function MyReservationsScreen({ onNavigate, reservations, onCancel, loading }: {
             ))}
           </div>
         )}
+
+        {/* Waiting lists */}
+        <div className="mt-10">
+          <h2 className="text-lg font-bold text-[#111B30] mb-1">Mis listas de espera</h2>
+          <p className="text-sm text-[#6B7A99] mb-4">
+            {waitlist.length === 0 ? "No estás en ninguna lista de espera." : "Te avisaremos en Notificaciones si se libera un cupo."}
+          </p>
+          {leaveError && <p className="text-xs text-[#C0392B] mb-3">{leaveError}</p>}
+          <div className="flex flex-col gap-3">
+            {waitlist.map(w => {
+              const meta = sportMeta(w.court_detail.sport);
+              return (
+                <div key={w.id} className="bg-white rounded-2xl shadow-sm border border-[#E8ECF4] p-4 flex items-center gap-4">
+                  <div className="w-11 h-11 rounded-full bg-[#1B2A4A] flex items-center justify-center flex-shrink-0">
+                    <span className="text-white font-bold text-sm">#{w.queue_position}</span>
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-0.5">
+                      {w.status === "notified" ? (
+                        <span className="text-xs font-semibold px-2 py-0.5 rounded-full" style={{ background: ABG, color: ATXT }}>¡Cupo disponible!</span>
+                      ) : (
+                        <StatusBadge type="waitlist" />
+                      )}
+                      <span className="text-xs text-[#6B7A99]">{meta.icon} {meta.label}</span>
+                    </div>
+                    <p className="text-sm font-semibold text-[#111B30] truncate">{w.court_detail.name}</p>
+                    <p className="text-xs text-[#6B7A99] mt-0.5">
+                      {w.reservation_date} · {w.start_time.slice(0, 5)} – {w.end_time.slice(0, 5)}
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => leave(w)}
+                    disabled={leavingId === w.id}
+                    className="flex-shrink-0 px-4 py-2 border border-[#D0D6E8] text-[#111B30] text-sm font-medium rounded-xl hover:bg-[#F4F6FA] transition-colors disabled:opacity-50"
+                  >
+                    {leavingId === w.id ? "Saliendo…" : "Salir de la lista"}
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        </div>
       </main>
     </div>
   );
@@ -600,13 +870,23 @@ function CancelModal({ reservation, onKeep, onConfirm }: { reservation: Reservat
 
 type BookingStep = "filter" | "confirm" | "done";
 
-function BookScreen({ courts, onNavigate, onBooked }: {
+function BookScreen({ courts, onNavigate, onBooked, activeReservation, initialDay, initialSlot }: {
   courts: Court[];
   onNavigate: (s: Screen) => void;
   onBooked: (r: Reservation) => void;
+  activeReservation: Reservation | null;
+  initialDay?: string;
+  initialSlot?: string;
 }) {
-  const [selectedDay, setSelectedDay] = useState(DAYS[0].key);
-  const [selectedSlot, setSelectedSlot] = useState<string | null>(null);
+  const [selectedDay, setSelectedDay] = useState(
+    initialDay && DAYS.some(d => d.key === initialDay) ? initialDay : DAYS[0].key
+  );
+  const [selectedSlot, setSelectedSlot] = useState<string | null>(
+    initialSlot && SLOTS.includes(initialSlot) ? initialSlot : null
+  );
+  const [waitlistError, setWaitlistError] = useState<string | null>(null);
+  const [slotTaken, setSlotTaken] = useState(false); // confirm failed because someone else booked it
+  const blocked = !!activeReservation;
   const [selectedCourt, setSelectedCourt] = useState<Court | null>(null);
   const [step, setStep] = useState<BookingStep>("filter");
   const [statusByCourt, setStatusByCourt] = useState<Record<number, "available" | "reserved">>({});
@@ -637,7 +917,7 @@ function BookScreen({ courts, onNavigate, onBooked }: {
   }, [selectedDay, selectedSlot]);
 
   const handleSelectSlot = (court: Court) => {
-    if (statusByCourt[court.id] === "reserved") return;
+    if (statusByCourt[court.id] === "reserved" || blocked) return;
     setSelectedCourt(court);
     setConfirmError(null);
     setStep("confirm");
@@ -658,7 +938,11 @@ function BookScreen({ courts, onNavigate, onBooked }: {
       onBooked(toUiReservation(reservation));
       setStep("done");
     } catch (err) {
-      if (err instanceof api.ApiError && err.status === 409) {
+      setSlotTaken(false);
+      if (err instanceof api.ApiError && err.code === "active_reservation_exists") {
+        setConfirmError(err.message);
+      } else if (err instanceof api.ApiError && err.status === 409) {
+        setSlotTaken(true);
         setConfirmError("Justo se acaba de reservar por otro estudiante. Puedes unirte a la lista de espera.");
       } else {
         setConfirmError("No se pudo completar la reserva. Intenta de nuevo.");
@@ -679,9 +963,9 @@ function BookScreen({ courts, onNavigate, onBooked }: {
         end_time: end,
       });
       setWaitlistJoined(prev => ({ ...prev, [court.id]: entry.queue_position }));
-    } catch {
-      // If already queued or another conflict, silently ignore — button will
-      // simply not switch to the "joined" state.
+      setWaitlistError(null);
+    } catch (err) {
+      setWaitlistError(err instanceof api.ApiError ? err.message : "No se pudo unir a la lista de espera.");
     }
   };
 
@@ -753,13 +1037,16 @@ function BookScreen({ courts, onNavigate, onBooked }: {
               {confirmError && (
                 <div className="bg-[#FEF0DC] rounded-xl p-3.5 mb-4">
                   <p className="text-xs text-[#8A5A0A] font-medium mb-2">{confirmError}</p>
-                  <button
-                    onClick={() => handleJoinWaitlist(selectedCourt)}
-                    className="text-xs font-semibold underline"
-                    style={{ color: ATXT }}
-                  >
-                    Unirme a la lista de espera
-                  </button>
+                  {slotTaken && (
+                    <button
+                      onClick={() => handleJoinWaitlist(selectedCourt)}
+                      className="text-xs font-semibold underline"
+                      style={{ color: ATXT }}
+                    >
+                      Unirme a la lista de espera
+                    </button>
+                  )}
+                  {waitlistError && <p className="text-xs text-[#C0392B] mt-2">{waitlistError}</p>}
                 </div>
               )}
 
@@ -790,6 +1077,31 @@ function BookScreen({ courts, onNavigate, onBooked }: {
           <h1 className="text-3xl font-bold text-[#111B30]">Reservar cancha</h1>
           <p className="text-sm text-[#6B7A99] mt-1">Selecciona el día y horario que prefieras</p>
         </div>
+
+        {activeReservation && (
+          <div className="flex items-start gap-3 bg-[#FEF0DC] rounded-2xl p-4 mb-5">
+            <span className="text-xl">⚠️</span>
+            <div className="flex-1">
+              <p className="text-sm font-semibold text-[#8A5A0A]">Ya tienes una reserva activa</p>
+              <p className="text-xs text-[#8A5A0A] mt-0.5">
+                {activeReservation.court} · {activeReservation.date} · {activeReservation.time}. Solo puedes reservar una cancha a la vez:
+                cancélala o espera a que termine para hacer otra.
+              </p>
+            </div>
+            <button
+              onClick={() => onNavigate("my-reservations")}
+              className="flex-shrink-0 px-3 py-1.5 text-xs font-semibold rounded-lg border border-[#D4720A]/40 text-[#8A5A0A] hover:bg-white/50"
+            >
+              Ver mi reserva
+            </button>
+          </div>
+        )}
+
+        {waitlistError && (
+          <div className="bg-[#FDEDEC] rounded-xl p-3 mb-5">
+            <p className="text-xs text-[#C0392B] font-medium">{waitlistError}</p>
+          </div>
+        )}
 
         {/* Day selector */}
         <div className="bg-white rounded-2xl border border-[#E8ECF4] shadow-sm p-4 mb-5">
@@ -880,10 +1192,12 @@ function BookScreen({ courts, onNavigate, onBooked }: {
 
                         {status === "available" ? (
                           <button onClick={() => handleSelectSlot(court)}
-                            className="mt-3 px-4 py-2 text-white text-sm font-semibold rounded-xl transition-colors"
-                            style={{ background: A }}
-                            onMouseEnter={e => (e.currentTarget.style.background = AH)}
-                            onMouseLeave={e => (e.currentTarget.style.background = A)}
+                            disabled={blocked}
+                            title={blocked ? "Ya tienes una reserva activa" : undefined}
+                            className="mt-3 px-4 py-2 text-white text-sm font-semibold rounded-xl transition-colors disabled:cursor-not-allowed"
+                            style={{ background: blocked ? "#A0AABF" : A }}
+                            onMouseEnter={e => { if (!blocked) e.currentTarget.style.background = AH; }}
+                            onMouseLeave={e => { if (!blocked) e.currentTarget.style.background = A; }}
                           >
                             Reservar este horario
                           </button>
@@ -897,7 +1211,8 @@ function BookScreen({ courts, onNavigate, onBooked }: {
                             </div>
                           ) : (
                             <button onClick={() => handleJoinWaitlist(court)}
-                              className="mt-3 px-4 py-2 text-sm font-semibold rounded-xl border transition-colors border-[#D0D6E8] text-[#111B30] hover:bg-[#F4F6FA]"
+                              disabled={blocked}
+                              className="mt-3 px-4 py-2 text-sm font-semibold rounded-xl border transition-colors border-[#D0D6E8] text-[#111B30] hover:bg-[#F4F6FA] disabled:opacity-40 disabled:cursor-not-allowed"
                             >
                               Unirse a lista de espera
                             </button>
@@ -918,11 +1233,11 @@ function BookScreen({ courts, onNavigate, onBooked }: {
 
 // ─── Waitlist Notification ────────────────────────────────────────────────────
 
-function WaitlistNotificationScreen({ offer, onNavigate, onConfirmed, onDeclined }: {
-  offer: ApiWaitlistEntry | null;
+function WaitlistOfferCard({ offer, onNavigate, onConfirmed, onDeclined }: {
+  offer: ApiWaitlistEntry;
   onNavigate: (s: Screen) => void;
   onConfirmed: (r: Reservation) => void;
-  onDeclined: () => void;
+  onDeclined: () => Promise<void>;
 }) {
   const [confirmed, setConfirmed] = useState<boolean | null>(null);
   const [confirming, setConfirming] = useState(false);
@@ -936,42 +1251,32 @@ function WaitlistNotificationScreen({ offer, onNavigate, onConfirmed, onDeclined
       const reservation = await api.confirmWaitlistOffer(offer.id);
       onConfirmed(toUiReservation(reservation));
       setConfirmed(true);
-    } catch {
-      setError("No se pudo confirmar la reserva. Puede que la oferta ya haya expirado.");
+    } catch (err) {
+      setError(
+        err instanceof api.ApiError && err.status === 409
+          ? err.message
+          : "No se pudo confirmar la reserva. Puede que la oferta ya haya expirado."
+      );
     } finally {
       setConfirming(false);
     }
   };
 
-  const handleDecline = () => {
-    // There is no explicit "decline" endpoint: simply not confirming means
-    // the offer will expire on its own and the system will automatically
-    // notify the next student in the queue (HU8).
-    setConfirmed(false);
-    onDeclined();
+  const handleDecline = async () => {
+    // Declining = leaving the waiting list: the spot goes right away to the
+    // next student in the queue (instead of waiting for the offer to expire).
+    try {
+      await onDeclined();
+      setConfirmed(false);
+    } catch (err) {
+      setError(err instanceof api.ApiError ? err.message : "No se pudo declinar el cupo.");
+    }
   };
-
-  if (!offer) {
-    return (
-      <div className="flex-1 overflow-y-auto bg-[#F4F6FA]">
-        <main className="max-w-2xl mx-auto px-6 py-16 flex flex-col items-center text-center">
-          <div className="text-3xl mb-3">🔔</div>
-          <h1 className="text-xl font-bold text-[#111B30] mb-2">No tienes notificaciones</h1>
-          <p className="text-sm text-[#6B7A99]">Cuando un cupo se libere en una lista de espera a la que te uniste, aparecerá aquí.</p>
-        </main>
-      </div>
-    );
-  }
 
   const meta = sportMeta(offer.court_detail.sport);
 
   return (
-    <div className="flex-1 overflow-y-auto bg-[#F4F6FA]">
-      <main className="max-w-2xl mx-auto px-6 py-10">
-        <div className="mb-6">
-          <p className="text-xs font-semibold uppercase tracking-widest mb-1" style={{ color: A }}>Universidad EAFIT</p>
-          <h1 className="text-3xl font-bold text-[#111B30]">Notificaciones</h1>
-        </div>
+    <div className="mb-8">
 
         {confirmed === null ? (
           <div className="rounded-2xl p-4 flex items-center gap-4 mb-6 shadow-lg" style={{ background: "#1B2A4A" }}>
@@ -1061,6 +1366,125 @@ function WaitlistNotificationScreen({ offer, onNavigate, onConfirmed, onDeclined
             )}
           </div>
         </div>
+    </div>
+  );
+}
+
+function WeatherAlertCard({ alert, onCancel, onKeep }: {
+  alert: api.ApiNotification;
+  onCancel: (n: api.ApiNotification) => Promise<void>;
+  onKeep: (n: api.ApiNotification) => Promise<void>;
+}) {
+  const [busy, setBusy] = useState<"cancel" | "keep" | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const r = alert.reservation_detail;
+
+  const run = async (kind: "cancel" | "keep") => {
+    setBusy(kind);
+    setError(null);
+    try {
+      await (kind === "cancel" ? onCancel(alert) : onKeep(alert));
+    } catch (err) {
+      setError(err instanceof api.ApiError ? err.message : "Algo salió mal. Intenta de nuevo.");
+      setBusy(null);
+    }
+  };
+
+  return (
+    <div className="bg-white rounded-2xl shadow-sm border-2 border-[#F5C6C0] overflow-hidden mb-4">
+      <div className="bg-[#FDEDEC] px-5 py-3 flex items-center gap-3">
+        <span className="text-2xl">{alert.data.icon || "⛈️"}</span>
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-bold text-[#8B1E14]">Alerta de mal clima</p>
+          <p className="text-xs text-[#8B1E14]/80 truncate">{alert.title.replace(/^\S+\s/, "")}</p>
+        </div>
+        {alert.data.source && <AiBadge source={alert.data.source} />}
+      </div>
+      <div className="p-5">
+        <p className="text-sm text-[#111B30] leading-relaxed mb-4">{alert.message}</p>
+        {r && (
+          <div className="grid grid-cols-3 gap-2 mb-4">
+            {[
+              { label: "Cancha", value: r.court_detail.name },
+              { label: "Fecha", value: r.reservation_date },
+              { label: "Horario", value: `${r.start_time.slice(0, 5)} – ${r.end_time.slice(0, 5)}` },
+            ].map(i => (
+              <div key={i.label} className="bg-[#F4F6FA] rounded-xl p-2.5">
+                <p className="text-[11px] text-[#6B7A99]">{i.label}</p>
+                <p className="text-xs font-semibold text-[#111B30] truncate">{i.value}</p>
+              </div>
+            ))}
+          </div>
+        )}
+        {error && <p className="text-xs text-[#C0392B] mb-3">{error}</p>}
+        <div className="flex gap-3">
+          <button
+            onClick={() => run("keep")}
+            disabled={!!busy}
+            className="flex-1 py-2.5 border border-[#D0D6E8] text-[#111B30] text-sm font-semibold rounded-xl hover:bg-[#F4F6FA] transition-colors disabled:opacity-50"
+          >
+            {busy === "keep" ? "Guardando…" : "Mantener reserva"}
+          </button>
+          <button
+            onClick={() => run("cancel")}
+            disabled={!!busy}
+            className="flex-1 py-2.5 bg-[#C0392B] text-white text-sm font-semibold rounded-xl hover:bg-[#a82e21] transition-colors disabled:opacity-50"
+          >
+            {busy === "cancel" ? "Cancelando…" : "Cancelar reserva"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function NotificationsScreen({ offer, alerts, onNavigate, onConfirmed, onDeclined, onCancelFromAlert, onDismissAlert }: {
+  offer: ApiWaitlistEntry | null;
+  alerts: api.ApiNotification[];
+  onNavigate: (s: Screen) => void;
+  onConfirmed: (r: Reservation) => void;
+  onDeclined: (entry: ApiWaitlistEntry) => Promise<void>;
+  onCancelFromAlert: (n: api.ApiNotification) => Promise<void>;
+  onDismissAlert: (n: api.ApiNotification) => Promise<void>;
+}) {
+  const weather = useAiData(api.weatherToday);
+  // Keep the offer card mounted after confirming/declining so its result message stays visible.
+  const [shownOffer, setShownOffer] = useState<ApiWaitlistEntry | null>(offer);
+  useEffect(() => { if (offer) setShownOffer(offer); }, [offer]);
+
+  return (
+    <div className="flex-1 overflow-y-auto bg-[#F4F6FA]">
+      <main className="max-w-2xl mx-auto px-6 py-10">
+        <div className="mb-6">
+          <p className="text-xs font-semibold uppercase tracking-widest mb-1" style={{ color: A }}>Universidad EAFIT</p>
+          <h1 className="text-3xl font-bold text-[#111B30]">Notificaciones</h1>
+        </div>
+
+        {alerts.map(a => (
+          <WeatherAlertCard key={a.id} alert={a} onCancel={onCancelFromAlert} onKeep={onDismissAlert} />
+        ))}
+
+        {shownOffer && (
+          <WaitlistOfferCard
+            offer={shownOffer}
+            onNavigate={onNavigate}
+            onConfirmed={onConfirmed}
+            onDeclined={() => onDeclined(shownOffer)}
+          />
+        )}
+
+        {alerts.length === 0 && !shownOffer && (
+          <div className="bg-white rounded-2xl border border-[#E8ECF4] p-10 flex flex-col items-center text-center mb-8">
+            <div className="text-3xl mb-3">🔔</div>
+            <h2 className="text-lg font-bold text-[#111B30] mb-1">No tienes notificaciones</h2>
+            <p className="text-sm text-[#6B7A99]">
+              Aquí verás cupos liberados de tus listas de espera y alertas de mal clima para tus reservas en canchas al aire libre.
+            </p>
+          </div>
+        )}
+
+        <h2 className="text-lg font-bold text-[#111B30] mb-4">🌦️ Reporte del clima de hoy</h2>
+        <WeatherCard report={weather.data} loading={weather.loading} />
       </main>
     </div>
   );
@@ -1078,7 +1502,21 @@ export default function App() {
   const [courts, setCourts] = useState<Court[]>([]);
   const [reservations, setReservations] = useState<Reservation[]>([]);
   const [reservationsLoading, setReservationsLoading] = useState(false);
-  const [waitlistOffer, setWaitlistOffer] = useState<ApiWaitlistEntry | null>(null);
+  const [waitlist, setWaitlist] = useState<ApiWaitlistEntry[]>([]);
+  const [alerts, setAlerts] = useState<api.ApiNotification[]>([]);
+  // Pre-selected day/slot when coming from a "quiet slot" recommendation.
+  const [bookPreset, setBookPreset] = useState<{ day: string; slot: string } | null>(null);
+
+  const waitlistOffer = waitlist.find(w => w.status === "notified") || null;
+  const activeReservations = reservations.filter(isActiveReservation);
+  const activeReservation = activeReservations[0] || null;
+
+  const refreshWaitlist = () =>
+    api.myWaitlist().then(setWaitlist).catch(() => undefined);
+
+  // Weather alerts are generated by the backend when this is called.
+  const refreshAlerts = () =>
+    api.myNotifications().then(setAlerts).catch(() => undefined);
 
   const loadAppData = async () => {
     setReservationsLoading(true);
@@ -1094,8 +1532,8 @@ export default function App() {
       setReservations(
         myReservations.filter(r => r.status === "confirmed").map(toUiReservation)
       );
-      const notified = myWaitlist.find(w => w.status === "notified");
-      setWaitlistOffer(notified || null);
+      setWaitlist(myWaitlist);
+      refreshAlerts(); // in the background — it may take a moment (forecast + AI)
     } finally {
       setReservationsLoading(false);
     }
@@ -1113,9 +1551,36 @@ export default function App() {
       .finally(() => setCheckingSession(false));
   }, []);
 
+  // While logged in, check waiting lists and weather alerts every 2 minutes.
+  useEffect(() => {
+    if (screen === "login") return;
+    const id = setInterval(() => { refreshWaitlist(); refreshAlerts(); }, 2 * 60 * 1000);
+    return () => clearInterval(id);
+  }, [screen === "login"]);
+
+  const navigate = (s: Screen) => {
+    if (s !== "book") setBookPreset(null);
+    if (s === "my-reservations") refreshWaitlist();
+    if (s === "waitlist-notification") { refreshWaitlist(); refreshAlerts(); }
+    setScreen(s);
+  };
+
   const handleLogin = async () => {
     await loadAppData();
     setScreen("home");
+  };
+
+  const handleLogout = () => {
+    api.logout();
+    setUserName("");
+    setCourts([]);
+    setReservations([]);
+    setWaitlist([]);
+    setAlerts([]);
+    setBookPreset(null);
+    setModal(null);
+    setCancelTarget(null);
+    setScreen("login");
   };
 
   const handleCancelClick = (r: Reservation) => {
@@ -1128,13 +1593,11 @@ export default function App() {
     try {
       await api.cancelReservation(cancelTarget.id);
       setReservations(prev => prev.filter(r => r.id !== cancelTarget.id));
+      setAlerts(prev => prev.filter(a => a.reservation !== cancelTarget.id));
       // A cancellation may have triggered a waiting-list notification for
       // someone else, but it could also affect *this* student if they were
       // waiting on a different slot that just opened up — refresh in the background.
-      api.myWaitlist().then(list => {
-        const notified = list.find(w => w.status === "notified");
-        setWaitlistOffer(notified || null);
-      });
+      refreshWaitlist();
     } finally {
       setModal(null);
       setCancelTarget(null);
@@ -1143,11 +1606,31 @@ export default function App() {
 
   const handleBooked = (r: Reservation) => {
     setReservations(prev => [...prev, r]);
-    setWaitlistOffer(null);
+    refreshWaitlist();
+    refreshAlerts();
   };
 
-  const handleWaitlistDeclined = () => {
-    setWaitlistOffer(null);
+  const handleLeaveWaitlist = async (entry: ApiWaitlistEntry) => {
+    await api.leaveWaitlist(entry.id);
+    setWaitlist(prev => prev.filter(w => w.id !== entry.id));
+    refreshWaitlist(); // queue positions of my other entries don't change, but stay in sync
+  };
+
+  const handleCancelFromAlert = async (n: api.ApiNotification) => {
+    await api.cancelReservationFromNotification(n.id);
+    setAlerts(prev => prev.filter(a => a.id !== n.id));
+    setReservations(prev => prev.filter(r => r.id !== n.reservation));
+    refreshWaitlist();
+  };
+
+  const handleDismissAlert = async (n: api.ApiNotification) => {
+    await api.dismissNotification(n.id);
+    setAlerts(prev => prev.filter(a => a.id !== n.id));
+  };
+
+  const handlePickSlot = (day: string, slot: string) => {
+    setBookPreset({ day, slot });
+    setScreen("book");
   };
 
   if (checkingSession) {
@@ -1158,19 +1641,47 @@ export default function App() {
 
   return (
     <div className="size-full flex flex-col" style={{ fontFamily: "Inter, sans-serif" }}>
-      <Navbar onNavigate={setScreen} active={screen} userName={userName} />
+      <Navbar
+        onNavigate={navigate}
+        active={screen}
+        userName={userName}
+        onLogout={handleLogout}
+        notificationCount={alerts.length + (waitlistOffer ? 1 : 0)}
+      />
 
-      {screen === "home" && <HomeScreen onNavigate={setScreen} reservations={reservations} userName={userName} />}
-      {screen === "my-reservations" && (
-        <MyReservationsScreen onNavigate={setScreen} reservations={reservations} onCancel={handleCancelClick} loading={reservationsLoading} />
+      {screen === "home" && (
+        <HomeScreen onNavigate={navigate} reservations={activeReservations} userName={userName} onPickSlot={handlePickSlot} />
       )}
-      {screen === "book" && <BookScreen courts={courts} onNavigate={setScreen} onBooked={handleBooked} />}
+      {screen === "my-reservations" && (
+        <MyReservationsScreen
+          onNavigate={navigate}
+          reservations={activeReservations}
+          onCancel={handleCancelClick}
+          loading={reservationsLoading}
+          waitlist={waitlist}
+          onLeaveWaitlist={handleLeaveWaitlist}
+        />
+      )}
+      {screen === "book" && (
+        <BookScreen
+          key={bookPreset ? `${bookPreset.day}-${bookPreset.slot}` : "default"}
+          courts={courts}
+          onNavigate={navigate}
+          onBooked={handleBooked}
+          activeReservation={activeReservation}
+          initialDay={bookPreset?.day}
+          initialSlot={bookPreset?.slot}
+        />
+      )}
       {screen === "waitlist-notification" && (
-        <WaitlistNotificationScreen
+        <NotificationsScreen
           offer={waitlistOffer}
-          onNavigate={setScreen}
+          alerts={alerts}
+          onNavigate={navigate}
           onConfirmed={handleBooked}
-          onDeclined={handleWaitlistDeclined}
+          onDeclined={handleLeaveWaitlist}
+          onCancelFromAlert={handleCancelFromAlert}
+          onDismissAlert={handleDismissAlert}
         />
       )}
 

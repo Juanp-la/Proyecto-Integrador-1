@@ -7,7 +7,7 @@ from reservations.serializers import ReservationSerializer
 
 from .models import WaitingListEntry
 from .serializers import JoinWaitlistSerializer, WaitingListEntrySerializer
-from .services import confirm_from_waitlist, join_waitlist
+from .services import confirm_from_waitlist, join_waitlist, leave_waitlist
 
 
 class MyWaitlistView(APIView):
@@ -32,7 +32,7 @@ class JoinWaitlistView(APIView):
         try:
             entry = join_waitlist(student=request.user, **serializer.validated_data)
         except ValidationError as exc:
-            return Response({"detail": str(exc)}, status=409)
+            return Response({"detail": exc.messages[0]}, status=409)
 
         return Response(WaitingListEntrySerializer(entry).data, status=201)
 
@@ -51,6 +51,25 @@ class ConfirmWaitlistOfferView(APIView):
         try:
             reservation = confirm_from_waitlist(entry=entry, requesting_user=request.user)
         except ValidationError as exc:
-            return Response({"detail": str(exc)}, status=409)
+            return Response({"detail": exc.messages[0]}, status=409)
 
         return Response(ReservationSerializer(reservation).data, status=201)
+
+
+class LeaveWaitlistView(APIView):
+    """Salir de la lista de espera (también sirve para declinar un cupo notificado)."""
+
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request, pk):
+        try:
+            entry = WaitingListEntry.objects.get(pk=pk)
+        except WaitingListEntry.DoesNotExist:
+            return Response({"detail": "Waiting-list entry not found."}, status=404)
+
+        try:
+            entry = leave_waitlist(entry=entry, requesting_user=request.user)
+        except ValidationError as exc:
+            return Response({"detail": exc.messages[0]}, status=409)
+
+        return Response(WaitingListEntrySerializer(entry).data)

@@ -24,6 +24,8 @@ class Court(models.Model):
     surface = models.CharField(max_length=60, blank=True)
     image_ref = models.CharField(max_length=120, blank=True)
     is_active = models.BooleanField(default=True)
+    # Outdoor courts are the ones affected by rain/storms (weather alerts).
+    is_outdoor = models.BooleanField(default=True)
 
     def __str__(self):
         return self.name

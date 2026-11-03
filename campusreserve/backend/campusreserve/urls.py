@@ -10,4 +10,6 @@ urlpatterns = [
     path("api/courts/", include("courts.urls")),
     path("api/reservations/", include("reservations.urls")),
     path("api/waitlist/", include("waitlist.urls")),
+    path("api/ai/", include("ai.urls")),
+    path("api/notifications/", include("notifications.urls")),
 ]

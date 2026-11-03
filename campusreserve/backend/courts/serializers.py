@@ -8,7 +8,7 @@ class CourtSerializer(serializers.ModelSerializer):
         model = Court
         fields = [
             "id", "name", "sport", "location", "capacity", "surface",
-            "image_ref", "is_active",
+            "image_ref", "is_active", "is_outdoor",
         ]
 
 

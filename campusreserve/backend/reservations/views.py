@@ -5,7 +5,12 @@ from rest_framework.views import APIView
 
 from .models import Reservation
 from .serializers import CreateReservationSerializer, ReservationSerializer
-from .services import ReservationConflictError, cancel_reservation, create_reservation
+from .services import (
+    ActiveReservationExistsError,
+    ReservationConflictError,
+    cancel_reservation,
+    create_reservation,
+)
 
 
 class MyReservationsView(APIView):
@@ -32,8 +37,10 @@ class ReservationCreateView(APIView):
                 student=request.user,
                 **serializer.validated_data,
             )
+        except ActiveReservationExistsError as exc:
+            return Response({"detail": str(exc), "code": exc.code}, status=409)
         except ReservationConflictError as exc:
-            return Response({"detail": str(exc)}, status=409)
+            return Response({"detail": str(exc), "code": "slot_taken"}, status=409)
 
         return Response(ReservationSerializer(reservation).data, status=201)
 
@@ -52,6 +59,6 @@ class ReservationCancelView(APIView):
         try:
             reservation = cancel_reservation(reservation=reservation, requesting_user=request.user)
         except ValidationError as exc:
-            return Response({"detail": str(exc)}, status=403)
+            return Response({"detail": exc.messages[0]}, status=403)
 
         return Response(ReservationSerializer(reservation).data)

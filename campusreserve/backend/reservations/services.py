@@ -8,6 +8,38 @@ class ReservationConflictError(Exception):
     """Raised when the requested court is already booked for that slot."""
 
 
+class ActiveReservationExistsError(Exception):
+    """Raised when the student already holds an active (upcoming) reservation."""
+
+    code = "active_reservation_exists"
+
+
+def active_reservations_for(student):
+    """
+    Confirmed reservations of `student` that haven't finished yet
+    (today with end_time still ahead, or any future date).
+    """
+    from django.db.models import Q
+    from django.utils import timezone
+
+    now = timezone.localtime()
+    return Reservation.objects.filter(student=student, status="confirmed").filter(
+        Q(reservation_date__gt=now.date())
+        | Q(reservation_date=now.date(), end_time__gt=now.time())
+    )
+
+
+def ensure_no_active_reservation(student):
+    """Una reserva a la vez: blocks a new booking while another one is still active."""
+    active = active_reservations_for(student).select_related("court").first()
+    if active:
+        raise ActiveReservationExistsError(
+            "Solo puedes tener una reserva activa a la vez. Ya tienes "
+            f"{active.court.name} el {active.reservation_date:%Y-%m-%d} a las "
+            f"{active.start_time:%H:%M}. Cancélala o espera a que termine para reservar otra."
+        )
+
+
 @transaction.atomic
 def create_reservation(*, student, court, reservation_date, start_time, end_time):
     """
@@ -16,7 +48,12 @@ def create_reservation(*, student, court, reservation_date, start_time, end_time
     basketball/volleyball) is modeled as a single Court row, this overlap
     check against `court=court` already blocks the other sport for the
     same slot — no extra logic needed.
+    Also enforces "una reserva a la vez" (one active reservation per student).
     """
+    # Lock the student's row so two simultaneous requests can't both pass the check.
+    type(student).objects.select_for_update().filter(pk=student.pk).first()
+    ensure_no_active_reservation(student)
+
     conflict_exists = Reservation.objects.select_for_update().filter(
         court=court,
         reservation_date=reservation_date,
@@ -38,6 +75,9 @@ def create_reservation(*, student, court, reservation_date, start_time, end_time
         end_time=end_time,
         status="confirmed",
     )
+    from ai.services import invalidate_recommendations
+
+    transaction.on_commit(invalidate_recommendations)
     return reservation
 
 
@@ -59,6 +99,17 @@ def cancel_reservation(*, reservation, requesting_user):
     reservation.status = "cancelled"
     reservation.cancelled_at = timezone.now()
     reservation.save(update_fields=["status", "cancelled_at"])
+
+    # Any pending weather alert for this reservation is now resolved.
+    from notifications.models import Notification
+
+    Notification.objects.filter(reservation=reservation, is_resolved=False).update(
+        is_resolved=True
+    )
+
+    from ai.services import invalidate_recommendations
+
+    transaction.on_commit(invalidate_recommendations)
 
     # Local import avoids a circular import between reservations <-> waitlist.
     from waitlist.services import notify_next_in_queue

@@ -18,6 +18,18 @@ This repository implements Sprint 1 + Sprint 2 user stories (HU1–HU8):
 | HU7 | Automatic notification on cancellation | 2 |
 | HU8 | Auto-advance the queue | 2 |
 
+### New features (Sprint 3)
+
+| Feature | Where |
+|---|---|
+| Logout button | Navbar → **Salir** |
+| One active reservation at a time (also blocks joining a waiting list) | `reservations/services.py` |
+| Leave a waiting list (also used to decline an offer — the spot goes to the next student right away) | `POST /api/waitlist/<id>/leave/` |
+| AI: most popular courts | `GET /api/ai/recommendations/popular/` |
+| AI: little-used courts & time slots (free, next 6 days, skips rainy outdoor slots) | `GET /api/ai/recommendations/quiet/` |
+| AI: daily weather report (Open-Meteo forecast + AI summary) | `GET /api/ai/weather/today/` |
+| Bad-weather alerts for outdoor reservations, with option to cancel | `GET /api/notifications/`, `POST /api/notifications/<id>/cancel-reservation/`, `POST /api/notifications/<id>/dismiss/` |
+
 ---
 
 ## Tech stack
@@ -51,6 +63,8 @@ campusreserve/
 │   ├── courts/          # Court catalog, search, status (HU1, HU3, HU5)
 │   ├── reservations/    # Reserve / cancel (HU2, HU4)
 │   ├── waitlist/        # Waiting list + Celery tasks (HU6, HU7, HU8)
+│   ├── ai/              # AI client, weather (Open-Meteo), recommendations
+│   ├── notifications/   # Bad-weather alerts for reservations
 │   ├── manage.py
 │   └── requirements.txt
 └── frontend/             # React application (Vite)
@@ -77,8 +91,20 @@ python manage.py migrate
 python manage.py seed_courts     # loads the soccer / basketball-volleyball / volleyball courts
 python manage.py createsuperuser # optional, for /admin/
 
+python manage.py seed_demo_usage # optional: past demo reservations so recommendations have data
 python manage.py runserver       # http://localhost:8000
 ```
+
+### AI configuration
+
+The AI features use any **OpenAI-compatible** chat API. By default they use **Google Gemini**, which has a free tier:
+
+1. Create a free key at <https://aistudio.google.com/apikey>.
+2. Put it in `backend/.env`: `AI_API_KEY=your-key` (see `.env.example` to use OpenAI or Groq instead).
+
+If `AI_API_KEY` is empty (or the AI call fails) everything still works: recommendations and the weather report are calculated with rules, and the UI shows *"Calculado con datos de uso"* instead of *"Generado con IA"*.
+
+Weather data comes from [Open-Meteo](https://open-meteo.com) (free, no key) for the EAFIT coordinates. Only courts marked **outdoor** (`is_outdoor`, editable in `/admin/`) get rain alerts; the parquet courts are indoor. Alerts are created when a student opens the app/notifications; to also check every hour in the background run `celery -A campusreserve beat` (or `python manage.py check_weather` from a cron job).
 
 In a **separate terminal** (same virtual environment), start the Celery worker — required for HU7/HU8 (automatic waiting-list notification and expiration):
 
