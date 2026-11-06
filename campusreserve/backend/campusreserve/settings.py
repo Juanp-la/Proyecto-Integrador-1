@@ -19,7 +19,7 @@ DEBUG = os.environ.get("DEBUG", "True") == "True"
 # IP pública de la máquina virtual (AWS EC2) + localhost para desarrollo local.
 # ".compute-1.amazonaws.com" permite entrar por el "Public DNS" de cualquier
 # instancia EC2 de us-east-1, así funciona aunque AWS cambie la IP al reiniciar.
-ALLOWED_HOSTS = ["75.101.225.78", ".compute-1.amazonaws.com", "localhost", "127.0.0.1"]
+ALLOWED_HOSTS = ["54.197.37.219", ".compute-1.amazonaws.com", "localhost", "127.0.0.1"]
 
 INSTALLED_APPS = [
     "django.contrib.admin",
