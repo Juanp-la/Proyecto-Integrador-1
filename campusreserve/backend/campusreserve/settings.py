@@ -17,9 +17,41 @@ load_dotenv(BASE_DIR / ".env")
 SECRET_KEY = os.environ.get("SECRET_KEY", "insecure-dev-key-change-me")
 DEBUG = os.environ.get("DEBUG", "True") == "True"
 # IP pública de la máquina virtual (AWS EC2) + localhost para desarrollo local.
-# ".compute-1.amazonaws.com" permite entrar por el "Public DNS" de cualquier
-# instancia EC2 de us-east-1, así funciona aunque AWS cambie la IP al reiniciar.
-ALLOWED_HOSTS = ["75.101.225.78", ".compute-1.amazonaws.com", "localhost", "127.0.0.1"]
+# ".compute-1.amazonaws.com" permite entrar por el "Public DNS" de EC2 (us-east-1).
+ALLOWED_HOSTS = ["54.197.37.219", ".compute-1.amazonaws.com", "localhost", "127.0.0.1"]
+
+
+def _ec2_public_ip():
+    """
+    En AWS EC2 la IP pública cambia cada vez que se reinicia el laboratorio.
+    Se la preguntamos al servicio de metadatos de la instancia (169.254.169.254)
+    al arrancar, así no hay que editar este archivo cada vez.
+    Fuera de AWS (en tu computador) falla rápido y no hace nada.
+    """
+    import urllib.request
+
+    # No proxies: the metadata service is only reachable directly from the instance.
+    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+    base = "http://169.254.169.254/latest"
+    try:
+        token_req = urllib.request.Request(
+            f"{base}/api/token",
+            method="PUT",
+            headers={"X-aws-ec2-metadata-token-ttl-seconds": "60"},
+        )
+        token = opener.open(token_req, timeout=0.3).read().decode()
+        ip_req = urllib.request.Request(
+            f"{base}/meta-data/public-ipv4",
+            headers={"X-aws-ec2-metadata-token": token},
+        )
+        return opener.open(ip_req, timeout=0.3).read().decode().strip()
+    except Exception:
+        return None
+
+
+_ip = _ec2_public_ip()
+if _ip and _ip not in ALLOWED_HOSTS:
+    ALLOWED_HOSTS.append(_ip)
 
 INSTALLED_APPS = [
     "django.contrib.admin",
